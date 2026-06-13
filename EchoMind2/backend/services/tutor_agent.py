@@ -141,16 +141,73 @@ def _split_sentences(text: str) -> list[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
+# Phrases that, when present in a sentence, pin the spotlight to a focus target.
+# Order matters: the first match wins. Lets the scene highlight exactly what the
+# narration is talking about instead of relying on sentence position.
+_FOCUS_KEYWORDS: dict[str, list[tuple[str, str]]] = {
+    "planet_jump": [
+        ("moon", "Moon"),
+        ("jupiter", "Jupiter"),
+        ("earth", "Earth"),
+        ("mercury", "Mercury"),
+        ("venus", "Venus"),
+        ("mars", "Mars"),
+        ("saturn", "Saturn"),
+        ("uranus", "Uranus"),
+        ("neptune", "Neptune"),
+    ],
+    "moon_drop": [
+        ("land", "land"),
+        ("same instant", "land"),
+        ("fall", "drop"),
+        ("drop", "drop"),
+        ("air", "drop"),
+    ],
+    "molecule_interaction_water": [
+        ("hydrogen bond", "bond"),
+        ("bond", "bond"),
+        ("negative", "charges"),
+        ("positive", "charges"),
+        ("charge", "charges"),
+    ],
+    "molecule_interaction_ionic": [
+        ("ionic bond", "bond"),
+        ("bond", "bond"),
+        ("electron", "charges"),
+        ("positive ion", "charges"),
+        ("negative", "charges"),
+        ("charge", "charges"),
+    ],
+    "ramp_box": [
+        ("friction", "friction"),
+        ("normal force", "normal"),
+        ("perpendicular", "normal"),
+        ("gravity", "gravity"),
+    ],
+}
+
+
+def _focus_for_sentence(key: str, sentence: str, fallback: str) -> str:
+    """Pick the focus target named in this sentence, else the positional fallback."""
+    lowered = sentence.lower()
+    for phrase, focus in _FOCUS_KEYWORDS.get(key, []):
+        if phrase in lowered:
+            return focus
+    return fallback
+
+
 def _build_beats(key: str, transcript: str) -> list[dict[str, Any]]:
     """Segment the narration into journey steps, each with a focus target so the
-    scene can spotlight the relevant element while that line is spoken."""
+    scene can spotlight the relevant element while that line is spoken. Focus is
+    chosen from keywords in each sentence, falling back to a positional sequence."""
     sentences = _split_sentences(transcript)
     if not sentences:
         return []
-    focuses = _FOCUS_SEQUENCE.get(key, ["overview"])
+    sequence = _FOCUS_SEQUENCE.get(key, ["overview"])
     beats: list[dict[str, Any]] = []
     for i, sentence in enumerate(sentences):
-        focus = focuses[min(i, len(focuses) - 1)]
+        fallback = sequence[min(i, len(sequence) - 1)]
+        focus = _focus_for_sentence(key, sentence, fallback)
         beats.append({"id": f"beat_{i}", "text": sentence, "focus": focus})
     return beats
 
