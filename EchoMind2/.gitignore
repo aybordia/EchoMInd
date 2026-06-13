@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+backend/.venv/
+
+# Environment secrets
+backend/.env
+
+# Generated runtime data (jobs, memory) — keep directory structure only
+backend/data/memory/*.json
+!backend/data/memory/.gitkeep
+backend/static/jobs/*
+!backend/static/jobs/.gitkeep
+
+# Local Claude Code state
+.claude/
+
+# OS
+.DS_Store
