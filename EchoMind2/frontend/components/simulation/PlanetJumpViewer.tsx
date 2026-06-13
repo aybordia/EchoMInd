@@ -18,10 +18,12 @@ function PlanetColumn({
   planet,
   x,
   highlighted,
+  focused,
 }: {
   planet: PlanetJumpPlanet;
   x: number;
   highlighted: boolean;
+  focused: boolean;
 }) {
   const jumperRef = useRef<Group>(null);
   const period = Math.max(planet.airtime_s, 0.4);
@@ -36,14 +38,16 @@ function PlanetColumn({
     jumperRef.current.rotation.y += 0.01;
   });
 
+  const lit = focused || highlighted;
+
   return (
-    <group position={[x, 0, 0]}>
+    <group position={[x, 0, 0]} scale={focused ? 1.12 : 1}>
       <mesh position={[0, PLANET_R, 0]} castShadow receiveShadow>
         <sphereGeometry args={[PLANET_R, 48, 48]} />
         <meshStandardMaterial
           color={planet.color}
-          emissive={highlighted ? planet.color : "#05060a"}
-          emissiveIntensity={highlighted ? 0.35 : 0.04}
+          emissive={lit ? planet.color : "#05060a"}
+          emissiveIntensity={focused ? 0.7 : highlighted ? 0.35 : 0.04}
           roughness={0.65}
           metalness={0.2}
         />
@@ -85,7 +89,13 @@ function PlanetColumn({
   );
 }
 
-export function PlanetJumpViewer({ payload }: { payload: PlanetJumpPayload }) {
+export function PlanetJumpViewer({
+  payload,
+  activeFocus,
+}: {
+  payload: PlanetJumpPayload;
+  activeFocus?: string | null;
+}) {
   const n = payload.planets.length;
   const startX = -((n - 1) * SPACING) / 2;
   const mid = (n - 1) / 2;
@@ -108,6 +118,7 @@ export function PlanetJumpViewer({ payload }: { payload: PlanetJumpPayload }) {
                 planet={planet}
                 x={startX + i * SPACING}
                 highlighted={payload.highlight.includes(planet.name)}
+                focused={!!activeFocus && activeFocus === planet.name}
               />
             </group>
           );

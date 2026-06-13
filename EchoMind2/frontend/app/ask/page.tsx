@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { AgentTimeline } from "@/components/AgentTimeline";
 import { AskBar } from "@/components/AskBar";
+import { CinematicJourney } from "@/components/CinematicJourney";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { NavBar } from "@/components/NavBar";
 import { SimulationViewer } from "@/components/SimulationViewer";
@@ -49,6 +50,7 @@ function AskPageContent() {
   const [timelineKey, setTimelineKey] = useState(0);
   const [showFeedback, setShowFeedback] = useState(false);
   const [voiceId, setVoiceId] = useState<string | null>(null);
+  const [activeFocus, setActiveFocus] = useState<string | null>(null);
 
   const autoSubmitted = useRef(false);
 
@@ -185,7 +187,15 @@ function AskPageContent() {
 
             <div className="grid flex-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
               <div className="relative h-[60vh] min-h-[420px] lg:h-[70vh]">
-                <SimulationViewer simulation={result.simulation} />
+                <SimulationViewer simulation={result.simulation} activeFocus={activeFocus} />
+                {result.teaching.beats && result.teaching.beats.length > 0 && (
+                  <CinematicJourney
+                    key={result.job_id}
+                    beats={result.teaching.beats}
+                    onFocusChange={setActiveFocus}
+                    onComplete={() => setShowFeedback(true)}
+                  />
+                )}
               </div>
               <TutorPanel
                 teaching={result.teaching}

@@ -67,6 +67,12 @@ async def _run_pipeline(
     teaching["audio_url"] = audio_url
     teaching["spoken_audio_url"] = audio_url
 
+    # Per-beat narration so the guided journey can pause and speak each step.
+    beats = teaching.get("beats", [])
+    beat_audio = await voice_service.synthesize_beats(beats, job_id, voice_pref, chosen_voice)
+    for beat in beats:
+        beat["audio_url"] = beat_audio.get(beat.get("id"))
+
     simulation = {**sim_payload, "viewer_url": f"/sim/{job_id}"}
 
     fallback_used = bool(

@@ -87,15 +87,10 @@ async def list_voices() -> list[dict]:
         return _FALLBACK_VOICES
 
 
-async def synthesize_voice(
-    text: str,
-    job_id: str,
-    voice_preference: str = "friendly_excited",
-    voice_id: str | None = None,
+def _synthesize_to(
+    text: str, job_id: str, filename: str, voice_preference: str, voice_id: str | None
 ) -> str | None:
-    """Narrate `text` with the student's chosen `voice_id` (falling back to the
-    env default), tone-shaped by `voice_preference`. Returns the MP3 URL or None.
-    """
+    """Synthesize `text` to `static/jobs/{job_id}/{filename}`. Returns URL or None."""
     if not ELEVENLABS_API_KEY or not text.strip():
         return None
 
@@ -127,10 +122,38 @@ async def synthesize_voice(
 
         job_dir = os.path.join(JOBS_DIR, job_id)
         os.makedirs(job_dir, exist_ok=True)
-        audio_path = os.path.join(job_dir, "explanation.mp3")
-        with open(audio_path, "wb") as f:
+        with open(os.path.join(job_dir, filename), "wb") as f:
             f.write(resp.content)
-
-        return f"/static/jobs/{job_id}/explanation.mp3"
+        return f"/static/jobs/{job_id}/{filename}"
     except requests.RequestException:
         return None
+
+
+async def synthesize_voice(
+    text: str,
+    job_id: str,
+    voice_preference: str = "friendly_excited",
+    voice_id: str | None = None,
+) -> str | None:
+    """Narrate the full `text` with the chosen voice. Returns the MP3 URL or None."""
+    return _synthesize_to(text, job_id, "explanation.mp3", voice_preference, voice_id)
+
+
+async def synthesize_beats(
+    beats: list[dict],
+    job_id: str,
+    voice_preference: str = "friendly_excited",
+    voice_id: str | None = None,
+) -> dict[str, str]:
+    """Synthesize one audio clip per journey beat so the guided tour can pause and
+    speak each step in the chosen voice. Returns {beat_id: url}; empty if no key."""
+    if not ELEVENLABS_API_KEY:
+        return {}
+    out: dict[str, str] = {}
+    for i, beat in enumerate(beats):
+        url = _synthesize_to(
+            beat.get("text", ""), job_id, f"beat_{i}.mp3", voice_preference, voice_id
+        )
+        if url:
+            out[beat.get("id", f"beat_{i}")] = url
+    return out

@@ -6,7 +6,19 @@ presentation preferences (Backboard / local memory).
 
 from __future__ import annotations
 
+import re
 from typing import Any
+
+# Ordered focus targets per simulation — the journey steps through these so the
+# camera/scene can spotlight the right element while that sentence is narrated.
+_FOCUS_SEQUENCE: dict[str, list[str]] = {
+    "planet_jump": ["overview", "Moon", "Earth", "Jupiter", "overview"],
+    "moon_drop": ["overview", "drop", "land", "overview"],
+    "molecule_interaction_water": ["overview", "charges", "bond", "overview"],
+    "molecule_interaction_ionic": ["overview", "charges", "bond", "overview"],
+    "ramp_box": ["overview", "gravity", "normal", "friction", "overview"],
+    "fallback_diagram": ["overview"],
+}
 
 _TRANSCRIPTS: dict[str, str] = {
     "planet_jump": (
@@ -124,6 +136,25 @@ def _adaptation_note(student_context: dict[str, Any]) -> str:
     return ""
 
 
+def _split_sentences(text: str) -> list[str]:
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _build_beats(key: str, transcript: str) -> list[dict[str, Any]]:
+    """Segment the narration into journey steps, each with a focus target so the
+    scene can spotlight the relevant element while that line is spoken."""
+    sentences = _split_sentences(transcript)
+    if not sentences:
+        return []
+    focuses = _FOCUS_SEQUENCE.get(key, ["overview"])
+    beats: list[dict[str, Any]] = []
+    for i, sentence in enumerate(sentences):
+        focus = focuses[min(i, len(focuses) - 1)]
+        beats.append({"id": f"beat_{i}", "text": sentence, "focus": focus})
+    return beats
+
+
 def build_teaching_result(
     scenario: dict[str, Any], sim_payload: dict[str, Any], student_context: dict[str, Any]
 ) -> dict[str, Any]:
@@ -171,6 +202,7 @@ def build_teaching_result(
 
     return {
         "transcript": transcript,
+        "beats": _build_beats(key, transcript),
         "key_takeaway": key_takeaway,
         "concepts_explained": scenario.get("concepts", []),
         "misconceptions_corrected": misconceptions_corrected,

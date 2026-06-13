@@ -219,8 +219,16 @@ export interface VisualStyleInstructions {
   analogy_preference: string;
 }
 
+export interface JourneyBeat {
+  id: string;
+  text: string;
+  focus: string;
+  audio_url?: string | null;
+}
+
 export interface TeachingResult {
   transcript: string;
+  beats?: JourneyBeat[];
   key_takeaway: string;
   concepts_explained: string[];
   misconceptions_corrected: string[];
