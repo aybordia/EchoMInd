@@ -529,25 +529,45 @@ Target narration length:
 
 Create `backend/services/voice_service.py`.
 
-Function:
+Functions:
 
 ```python
-async def synthesize_voice(text: str, job_id: str, voice_preference: str) -> str | None:
-    ...
+async def list_voices() -> list[dict]:
+    """Return the selectable voices for the student's picker.
+    If ELEVENLABS_API_KEY exists, proxy the ElevenLabs voices list
+    (including the account's own custom/cloned voices) as
+    [{ "voice_id", "name", "style_label", "preview_url" }].
+    If not, return a small static list mapped to browser speechSynthesis voices.
+    The ElevenLabs key never leaves the backend."""
+
+async def synthesize_voice(
+    text: str, job_id: str, voice_id: str | None, voice_preference: str
+) -> str | None:
+    """Narrate with the student's chosen voice_id when provided; otherwise pick a
+    default voice matching voice_preference (tone). Returns the MP3 URL or None."""
 ```
 
-If `ELEVENLABS_API_KEY` exists:
+Expose the picker data through a route (in `agent_router` or a small
+`voice_router`):
 
-- generate MP3
+```text
+GET /api/voices   ->   [{ "voice_id", "name", "style_label", "preview_url" }]
+```
+
+`synthesize_voice` behavior — if `ELEVENLABS_API_KEY` exists:
+
+- generate MP3 with the chosen `voice_id` (fall back to a tone-matched default if
+  `voice_id` is missing or invalid)
 - save to `backend/static/jobs/{job_id}/explanation.mp3`
 - return URL
 
 If unavailable:
 
 - return `None`
-- frontend uses browser TTS
+- frontend uses browser TTS with the student's selected browser voice
 
-Do not block result completion if TTS fails.
+Do not block result completion if TTS fails. The chosen `voice_id` flows in from
+memory (08 profile) via the agent router; persist any new choice back to memory.
 
 ## 13. Step 8 - Agent Router And Job System
 
@@ -692,9 +712,12 @@ Flow:
 3. ask learning style
 4. ask favorite topics
 5. ask explanation depth
-6. ask voice style
-7. call `submitOnboarding`
-8. route to `/ask`
+6. ask voice style (tone)
+7. **let the student pick their own voice**: load `GET /api/voices`, show the list
+   (including the account's custom/cloned voices) with a Preview button per voice;
+   store the chosen `voice_id` + `voice_label`
+8. call `submitOnboarding` (include `voice_id`, `voice_label`)
+9. route to `/ask`
 
 Learning-style options:
 

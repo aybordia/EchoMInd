@@ -123,7 +123,9 @@ class OnboardingRequest(BaseModel):
     learning_style: list[str] = []
     favorite_topics: list[str] = []
     explanation_depth: str = "quick_then_deeper"
-    voice_preference: str = "friendly_excited"
+    voice_preference: str = "friendly_excited"   # tone only
+    voice_id: str | None = None                  # student's chosen ElevenLabs voice
+    voice_label: str | None = None               # friendly display name for that voice
 ```
 
 ### FeedbackRequest
@@ -257,6 +259,27 @@ Response:
 ```json
 {"session_id":"session_...","user_id":"user_..."}
 ```
+
+### Voices
+
+Powers the student's voice picker. Proxies the ElevenLabs voices list (including
+the account's own custom/cloned voices) so the key stays on the backend.
+
+```text
+GET /api/voices
+```
+
+Response:
+
+```json
+[
+  { "voice_id": "elevenlabs_voice_abc", "name": "Aria",
+    "style_label": "warm, friendly", "preview_url": "/static/voice_previews/aria.mp3" }
+]
+```
+
+If `ELEVENLABS_API_KEY` is unset, returns a small static list mapped to browser
+`speechSynthesis` voices so the picker still works.
 
 ### Ask Agent
 

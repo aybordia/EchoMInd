@@ -59,7 +59,9 @@ Schema (`memory_version` lets us migrate safely):
   "profile": {
     "student_level": "middle_school",          // elementary | middle_school | high_school | college
     "favorite_topics": ["space", "chemistry"],
-    "voice_preference": "friendly_excited"      // calm | excited | funny | professor | friendly_excited
+    "voice_preference": "friendly_excited",     // tone: calm | excited | funny | professor | friendly_excited
+    "voice_id": "elevenlabs_voice_abc",         // the student's CHOSEN voice (incl. their own custom voice)
+    "voice_label": "Aria"                       // friendly display name for the chosen voice
   },
 
   // ---- HOW THEY LEARN BEST (the adaptive dials) ----
