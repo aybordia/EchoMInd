@@ -5,10 +5,12 @@ import { useSearchParams } from "next/navigation";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { AgentTimeline } from "@/components/AgentTimeline";
 import { AskBar } from "@/components/AskBar";
+import { CinematicJourney } from "@/components/CinematicJourney";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { NavBar } from "@/components/NavBar";
 import { SimulationViewer } from "@/components/SimulationViewer";
 import { TutorPanel } from "@/components/TutorPanel";
+import { VoicePicker } from "@/components/VoicePicker";
 import { askAgent, followupAgent } from "@/lib/api";
 import { AGENT_STAGES, SAMPLE_PROMPTS } from "@/lib/constants";
 import { useEchoSession } from "@/lib/session";
@@ -47,6 +49,8 @@ function AskPageContent() {
   const [resultReady, setResultReady] = useState(false);
   const [timelineKey, setTimelineKey] = useState(0);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [voiceId, setVoiceId] = useState<string | null>(null);
+  const [activeFocus, setActiveFocus] = useState<string | null>(null);
 
   const autoSubmitted = useRef(false);
 
@@ -72,9 +76,13 @@ function AskPageContent() {
   const handleAsk = useCallback(
     (q: string) => {
       if (!sessionId || !userId) return;
-      runRequest(() => askAgent({ question: q, session_id: sessionId, user_id: userId }), q);
+      runRequest(
+        () =>
+          askAgent({ question: q, session_id: sessionId, user_id: userId, voice_id: voiceId }),
+        q
+      );
     },
-    [sessionId, userId, runRequest]
+    [sessionId, userId, runRequest, voiceId]
   );
 
   const handleFollowup = useCallback(
@@ -87,11 +95,12 @@ function AskPageContent() {
             followup: q,
             session_id: sessionId,
             user_id: userId,
+            voice_id: voiceId,
           }),
         q
       );
     },
-    [sessionId, userId, result, runRequest]
+    [sessionId, userId, result, runRequest, voiceId]
   );
 
   useEffect(() => {
@@ -129,6 +138,11 @@ function AskPageContent() {
         </div>
 
         <AskBar onSubmit={handleAsk} loading={view === "running"} initialValue={initialQuestion} />
+
+        <div className="flex flex-wrap items-center gap-2 text-xs text-foreground-subtle">
+          <span>Tutor voice:</span>
+          <VoicePicker voiceId={voiceId} onChange={(id) => setVoiceId(id)} />
+        </div>
 
         {view === "idle" && (
           <div className="flex flex-wrap gap-2">
@@ -173,7 +187,15 @@ function AskPageContent() {
 
             <div className="grid flex-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
               <div className="relative h-[60vh] min-h-[420px] lg:h-[70vh]">
-                <SimulationViewer simulation={result.simulation} />
+                <SimulationViewer simulation={result.simulation} activeFocus={activeFocus} />
+                {result.teaching.beats && result.teaching.beats.length > 0 && (
+                  <CinematicJourney
+                    key={result.job_id}
+                    beats={result.teaching.beats}
+                    onFocusChange={setActiveFocus}
+                    onComplete={() => setShowFeedback(true)}
+                  />
+                )}
               </div>
               <TutorPanel
                 teaching={result.teaching}

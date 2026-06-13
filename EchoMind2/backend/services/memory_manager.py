@@ -54,6 +54,8 @@ def _default_memory(user_id: str) -> dict[str, Any]:
         "favorite_visual_style": "cinematic_with_labels",
         "learning_style": [],
         "explanation_depth": "quick_then_deeper",
+        "voice_id": None,
+        "voice_label": None,
         "presentation_preferences": {
             "math_level": "light_equations",
             "pace": "quick_then_deeper",
@@ -155,6 +157,9 @@ async def store_onboarding(req: OnboardingRequest) -> dict[str, Any]:
     memory["explanation_depth"] = req.explanation_depth
     memory["presentation_preferences"]["pace"] = req.explanation_depth
     memory["presentation_preferences"]["voice_style"] = req.voice_preference
+    if req.voice_id:
+        memory["voice_id"] = req.voice_id
+        memory["voice_label"] = req.voice_label
     memory["interests"] = list(dict.fromkeys(memory.get("interests", []) + req.favorite_topics))
     memory["onboarding_complete"] = True
     _save(req.user_id, memory)

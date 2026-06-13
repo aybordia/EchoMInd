@@ -30,11 +30,19 @@ Core packages:
 - `tailwindcss`
 - `three`
 - `@react-three/fiber`
-- `framer-motion`
+- `@react-three/drei` — Environment (HDRI), ContactShadows, Html labels, Text
+- `@react-three/postprocessing` — Bloom, SSAO, DepthOfField, Vignette, ToneMapping
+- `maath` — easing / smooth-damping for camera choreography
+- `framer-motion` — beat-card overlays and UI motion
 - `lucide-react`
+
+These power the real-time 3D Cinematic Engine. Its full spec (materials, lighting,
+postFX, camera, presets, components) is in
+[`07_CINEMATIC_RENDER_ENGINE.md`](07_CINEMATIC_RENDER_ENGINE.md).
 
 Optional:
 
+- `leva` (dev only) — live-tune lighting/postFX, stripped from prod
 - `zustand` for app state
 - `react-dropzone` for video upload
 - `wavesurfer.js` or simple canvas for audio waveform
@@ -164,6 +172,8 @@ type EchoMindState = {
   jobStatus: JobStatus | null
   result: AgentResult | null
   voiceEnabled: boolean
+  voiceId: string | null        // student's chosen ElevenLabs (or browser) voice
+  voiceLabel: string | null
   avatarEnabled: boolean
   memorySummary: StudentMemory | null
   onboardingComplete: boolean
@@ -180,6 +190,8 @@ session_id
 user_id
 echomind_last_job_id
 echomind_voice_enabled
+echomind_voice_id
+echomind_voice_label
 echomind_student_level
 echomind_onboarding_complete
 echomind_learning_style
@@ -224,9 +236,31 @@ Use ElevenLabs TTS for polished narration.
 
 ElevenLabs documents text-to-speech APIs for lifelike audio, real-time audio use cases, and multiple voice styles. Use it for the final spoken explanation if API access is available.
 
+### Let The Student Choose Their Own Voice
+
+The tutor voice is personal, so the student picks it — do not hardcode one voice.
+
+- A **voice picker** appears in onboarding and in a settings/voice menu on `/ask`.
+- It lists the available ElevenLabs voices (the backend exposes them via
+  `GET /api/voices`, which proxies the ElevenLabs voices list so the key stays on
+  the backend). Each entry shows a name, a short style label, and a **"Preview"
+  button** that plays a short sample line.
+- Selecting a voice stores `voice_id` (and a friendly `voice_label`) in app state +
+  localStorage, and persists it to memory via onboarding/feedback so it carries
+  across sessions (see `08` profile and `06` voice service).
+- A student may also pick from their **own ElevenLabs library** — any custom or
+  cloned voice on the account behind the configured key shows up in the same list,
+  so they can use a voice they created themselves.
+- If ElevenLabs is unavailable, the picker falls back to the browser
+  `speechSynthesis` voice list (still selectable), so the choice always works.
+
+Every request then narrates with the student's chosen `voice_id`; `voice_preference`
+(calm / excited / professor / friendly) only sets tone/pacing when no explicit
+voice is chosen.
+
 ### Fallback
 
-Use browser `speechSynthesis`.
+Use browser `speechSynthesis` (with its own selectable voice list).
 
 ### Audio Output Contract
 
@@ -235,6 +269,7 @@ Backend returns:
 ```json
 {
   "audio_url": "/static/jobs/job_123/explanation.mp3",
+  "voice_id": "elevenlabs_voice_abc",
   "transcript": "Without air resistance, mass does not change how fast objects fall..."
 }
 ```
@@ -309,24 +344,29 @@ Component:
 frontend/components/SimulationViewer.tsx
 ```
 
+This is a thin wrapper. The real rendering is the Cinematic Engine
+(`components/cinematic/CinematicStage.tsx`), specified fully in
+[`07_CINEMATIC_RENDER_ENGINE.md`](07_CINEMATIC_RENDER_ENGINE.md). `SimulationViewer`
+just receives an `AgentResult`, pulls its `simulation.cinematic_scene_spec`, and
+mounts `CinematicStage`.
+
 Responsibilities:
 
-- render live preview
-- receive WebSocket frames/status
-- show loading states
-- display camera controls if useful
-- overlay labels/arrows
-- support split-screen comparisons
+- pass the `CinematicSceneSpec` to `CinematicStage`
+- show loading states while the result is being prepared
+- toggle between scripted playback and free-explore (OrbitControls) modes
+- support split-screen / side-by-side for comparisons and video-twin
+- drop to the `diagram_fallback` preset if WebGL2 is unavailable (see 07 §8)
 
-Viewer modes:
+Viewer modes (all are presets of the same engine):
 
 ```text
-realtime_3d
-video_player
-diagram
+planet_jump
 molecule
+moon_drop
+ramp_box
 side_by_side
-fallback_card
+diagram_fallback
 ```
 
 ## 9. Cinematic Player
@@ -337,12 +377,16 @@ Component:
 frontend/components/CinematicPlayer.tsx
 ```
 
+`CinematicPlayer` is `CinematicStage` in scripted-playback mode plus playback UI.
+The default "film" is always the real-time 3D render; an AI-enhanced MP4, when
+present, appears as an alternate tab (see 07 §12).
+
 Responsibilities:
 
-- play final generated/rendered video
-- show progress while video is rendering
-- fallback to simulation replay if video unavailable
-- sync transcript/audio if possible
+- play the real-time 3D clip on the master clock (audio + visuals synced, 07 §9)
+- replay / scrub the clip
+- if an optional `video_url` exists, offer it as a "Film" tab; otherwise hide it
+- never block or error if the AI video is missing — real-time 3D is the deliverable
 
 ## 10. Diagram Overlay
 

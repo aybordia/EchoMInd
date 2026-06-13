@@ -8,10 +8,16 @@ import { PlanetJumpViewer } from "./simulation/PlanetJumpViewer";
 import { RampBoxViewer } from "./simulation/RampBoxViewer";
 
 /** Dispatches to the right 3D viewer (or 2D diagram) based on `simulation.type`. */
-export function SimulationViewer({ simulation }: { simulation: SimulationPayload }) {
+export function SimulationViewer({
+  simulation,
+  activeFocus,
+}: {
+  simulation: SimulationPayload;
+  activeFocus?: string | null;
+}) {
   switch (simulation.type) {
     case "planet_jump":
-      return <PlanetJumpViewer payload={simulation} />;
+      return <PlanetJumpViewer payload={simulation} activeFocus={activeFocus} />;
     case "moon_drop":
       return <MoonDropViewer payload={simulation} />;
     case "molecule_interaction":

@@ -22,6 +22,16 @@ class OnboardingRequest(BaseModel):
     favorite_topics: list[str] = Field(default_factory=list)
     explanation_depth: str = "quick_then_deeper"
     voice_preference: str = "friendly_excited"
+    voice_id: Optional[str] = None
+    voice_label: Optional[str] = None
+
+
+class Voice(BaseModel):
+    voice_id: str
+    name: str
+    style_label: str = ""
+    preview_url: Optional[str] = None
+    category: str = "premade"
 
 
 class OnboardingResponse(BaseModel):
@@ -50,6 +60,7 @@ class AskRequest(BaseModel):
     user_id: str
     student_level: str = "middle_school"
     mode: str = "voice_or_text"
+    voice_id: Optional[str] = None
 
 
 class FollowupRequest(BaseModel):
@@ -57,6 +68,7 @@ class FollowupRequest(BaseModel):
     followup: str
     session_id: str
     user_id: str
+    voice_id: Optional[str] = None
 
 
 class Scenario(BaseModel):

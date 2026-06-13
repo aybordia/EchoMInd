@@ -13,10 +13,13 @@ import type {
   OnboardingResponse,
   SessionResponse,
   VideoTwinUploadResponse,
+  Voice,
 } from "./types";
 
-export const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8001";
+// Same-origin by default: requests go to /api/... on the frontend port and Next
+// rewrites them to the backend (see next.config.ts). Override with
+// NEXT_PUBLIC_BACKEND_URL only if you intentionally point at a separate origin.
+export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BACKEND_URL}${path}`, {
@@ -56,6 +59,10 @@ export function submitOnboarding(
 
 export function getMemory(userId: string): Promise<MemorySummary> {
   return request<MemorySummary>(`/api/memory/${encodeURIComponent(userId)}`);
+}
+
+export function listVoices(): Promise<Voice[]> {
+  return request<Voice[]>("/api/voices");
 }
 
 export function askAgent(payload: AskRequest): Promise<AgentResult> {

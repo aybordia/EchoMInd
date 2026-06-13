@@ -358,19 +358,26 @@ This layer should be built with code.
 
 ### Layer 2 - Cinematic Layer
 
-This makes the truth layer visually stunning.
+This makes the truth layer visually stunning. **This is the product's signature and
+its hardest quality bar — the output must look like a real cinematic film, not a
+diagram.**
 
 It produces:
 
-- beautiful video
-- realistic materials
-- dramatic camera movement
-- polished educational overlays
-- voice narration
+- a real-time 3D film: PBR materials, HDRI lighting, soft shadows, bloom, depth of
+  field, ACES tone mapping, eased camera choreography, a slow-motion hero moment
+- realistic materials and dramatic lighting
+- polished educational overlays (3D labels, force arrows, beat cards)
+- voice narration synced to the visuals
 
-This layer can use rendering engines and/or video APIs.
+**Locked decision:** the cinematic layer is **real-time 3D first** (React Three
+Fiber + postprocessing + PBR + HDRI), driven by a single `CinematicSceneSpec`
+hand-off object. AI video generation (Runway/Sora) and offline Blender renders are
+optional polish layers, never dependencies. The full, concrete spec is in
+[`07_CINEMATIC_RENDER_ENGINE.md`](07_CINEMATIC_RENDER_ENGINE.md).
 
 The truth layer prevents hallucinated science. The cinematic layer wins the room.
+If a scene looks like a flat applet or an unstyled diagram, it is not done.
 
 ## 10. API Direction
 

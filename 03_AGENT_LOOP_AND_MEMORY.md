@@ -303,6 +303,12 @@ Remember when you asked about car crashes? This is the same conservation-of-mome
 
 ## 7. Backboard Or Local Memory
 
+> The concrete, buildable version of everything in §6–§7 — the memory file format,
+> the manager API, the deterministic adaptation rules, and the Backboard adapter —
+> is in [`08_BACKBOARD_MEMORY_AND_LEARNING.md`](08_BACKBOARD_MEMORY_AND_LEARNING.md).
+> Decision: the local memory file is always-on and is the runtime source of truth;
+> Backboard is the durable sync target. The product never blocks on Backboard.
+
 If Backboard access is available, use it as the durable memory system.
 
 Backend-only usage:

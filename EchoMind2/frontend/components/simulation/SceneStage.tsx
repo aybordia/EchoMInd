@@ -1,8 +1,41 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
-import { OrbitControls, Stars } from "@react-three/drei";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import {
+  OrbitControls,
+  Stars,
+  Environment,
+  Lightformer,
+  ContactShadows,
+  AdaptiveDpr,
+} from "@react-three/drei";
+import {
+  EffectComposer,
+  Bloom,
+  Vignette,
+  DepthOfField,
+  N8AO,
+  ToneMapping,
+} from "@react-three/postprocessing";
+import { easing } from "maath";
+import { ToneMappingMode } from "postprocessing";
+import { ACESFilmicToneMapping, type Vector3 } from "three";
 import { Suspense, type ReactNode } from "react";
+
+interface OrbitLike {
+  target: Vector3;
+  autoRotate: boolean;
+  autoRotateSpeed: number;
+  update: () => void;
+}
+
+/** A scripted camera move: where to look, and where the camera should sit. */
+export interface CameraFocus {
+  /** World point to look at. */
+  lookAt: [number, number, number];
+  /** World position for the camera. */
+  position: [number, number, number];
+}
 
 interface SceneStageProps {
   children: ReactNode;
@@ -12,9 +45,58 @@ interface SceneStageProps {
   minDistance?: number;
   maxDistance?: number;
   enableZoom?: boolean;
+  /** Deep-space starfield (planets/moon) vs a clean studio void (molecules/ramp). */
+  starfield?: boolean;
+  /** Soft contact shadow on the ground plane. */
+  groundShadow?: boolean;
+  /** Tint of the key light. */
+  keyColor?: string;
+  /**
+   * When provided, the camera is "directed": it eases to this framing and
+   * auto-rotation pauses. Pass `null` to return to a wide, auto-rotating
+   * overview. Omit entirely to keep the default free-orbit behavior.
+   */
+  cameraFocus?: CameraFocus | null;
 }
 
-/** Shared cinematic Three.js stage: lighting, starfield, and a slow auto-orbit camera. */
+/** Eases the camera + orbit target toward a scripted focus, or back to a wide
+ *  auto-rotating overview when focus is null. Drives the journey's cinematics. */
+function CameraDirector({
+  focus,
+  overview,
+  autoRotateSpeed,
+}: {
+  focus?: CameraFocus | null;
+  overview: [number, number, number];
+  autoRotateSpeed: number;
+}) {
+  const controls = useThree((s) => s.controls) as OrbitLike | null;
+  const camera = useThree((s) => s.camera);
+
+  useFrame((_, dt) => {
+    if (!controls) return;
+    if (focus) {
+      controls.autoRotate = false;
+      easing.damp3(camera.position, focus.position, 0.55, dt);
+      easing.damp3(controls.target, focus.lookAt, 0.55, dt);
+    } else {
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = autoRotateSpeed;
+      easing.damp3(camera.position, overview, 0.9, dt);
+      easing.damp3(controls.target, [0, 0.8, 0], 0.9, dt);
+    }
+    controls.update();
+  });
+  return null;
+}
+
+/**
+ * Shared cinematic stage — the "looks real" baseline for every viewer:
+ * inline image-based lighting (offline-safe), a 3-point rig, soft contact
+ * shadows, and a postprocessing grade (N8AO ambient occlusion, bloom, subtle
+ * depth of field, vignette, ACES tone mapping).
+ * See 07_CINEMATIC_RENDER_ENGINE.md.
+ */
 export function SceneStage({
   children,
   cameraPosition = [0, 2.5, 9],
@@ -23,18 +105,68 @@ export function SceneStage({
   minDistance = 3,
   maxDistance = 22,
   enableZoom = true,
+  starfield = true,
+  groundShadow = true,
+  keyColor = "#fff3e0",
+  cameraFocus,
 }: SceneStageProps) {
+  const directed = cameraFocus !== undefined;
   return (
-    <Canvas camera={{ position: cameraPosition, fov }} dpr={[1, 1.5]} gl={{ antialias: true }}>
+    <Canvas
+      shadows
+      camera={{ position: cameraPosition, fov }}
+      dpr={[1, 2]}
+      gl={{
+        antialias: true,
+        toneMapping: ACESFilmicToneMapping,
+        toneMappingExposure: 1.05,
+        powerPreference: "high-performance",
+      }}
+    >
       <Suspense fallback={null}>
         <color attach="background" args={["#05060a"]} />
-        <fog attach="fog" args={["#05060a", 14, 34]} />
-        <ambientLight intensity={0.45} />
-        <directionalLight position={[6, 9, 6]} intensity={1.4} color="#fff3e0" castShadow />
-        <pointLight position={[-8, 4, -6]} intensity={0.7} color="#7dd3fc" />
-        <Stars radius={90} depth={50} count={2000} factor={3.2} fade speed={0.4} />
+        <fog attach="fog" args={["#05060a", 16, 42]} />
+
+        {/* Image-based lighting — inline lightformers, no remote HDR fetch (works offline). */}
+        <Environment resolution={256} frames={1}>
+          <Lightformer intensity={2.4} color={keyColor} position={[6, 8, 6]} scale={[12, 12, 1]} />
+          <Lightformer intensity={0.9} color="#7dd3fc" position={[-9, 4, -6]} scale={[10, 10, 1]} />
+          <Lightformer intensity={1.6} color="#c4b5fd" position={[0, -6, 4]} scale={[10, 6, 1]} />
+        </Environment>
+
+        {/* Direct 3-point rig on top of IBL for crisp highlights and real shadows. */}
+        <ambientLight intensity={0.25} />
+        <directionalLight
+          position={[6, 9, 6]}
+          intensity={2.2}
+          color={keyColor}
+          castShadow
+          shadow-mapSize={[2048, 2048]}
+          shadow-bias={-0.0004}
+        />
+        <pointLight position={[-8, 4, -6]} intensity={0.6} color="#7dd3fc" />
+        <pointLight position={[0, 6, -8]} intensity={1.4} color="#ffffff" />
+
+        {starfield && (
+          <Stars radius={120} depth={60} count={2600} factor={3.6} fade speed={0.4} />
+        )}
+
         {children}
+
+        {groundShadow && (
+          <ContactShadows
+            position={[0, -0.01, 0]}
+            opacity={0.55}
+            scale={40}
+            blur={2.6}
+            far={14}
+            resolution={1024}
+            color="#000000"
+          />
+        )}
+
         <OrbitControls
+          makeDefault
           enablePan={false}
           enableZoom={enableZoom}
           autoRotate
@@ -43,6 +175,24 @@ export function SceneStage({
           maxDistance={maxDistance}
           maxPolarAngle={Math.PI / 1.7}
         />
+
+        {directed && (
+          <CameraDirector
+            focus={cameraFocus}
+            overview={cameraPosition}
+            autoRotateSpeed={autoRotateSpeed}
+          />
+        )}
+
+        <EffectComposer enableNormalPass multisampling={4}>
+          <N8AO aoRadius={0.9} intensity={1.6} distanceFalloff={1} color="#04050a" />
+          <Bloom intensity={0.85} luminanceThreshold={0.72} luminanceSmoothing={0.32} mipmapBlur />
+          <DepthOfField focusDistance={0.012} focalLength={0.05} bokehScale={2.2} />
+          <Vignette eskil={false} offset={0.28} darkness={0.62} />
+          <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+        </EffectComposer>
+
+        <AdaptiveDpr pixelated />
       </Suspense>
     </Canvas>
   );

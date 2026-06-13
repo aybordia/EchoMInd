@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
+import { VoicePicker } from "@/components/VoicePicker";
 import { submitOnboarding } from "@/lib/api";
 import { markOnboardingComplete, useEchoSession } from "@/lib/session";
 import { LEARNING_STYLES } from "@/lib/types";
@@ -113,6 +114,8 @@ export default function OnboardingPage() {
   const [topics, setTopics] = useState<string[]>([]);
   const [explanationDepth, setExplanationDepth] = useState("quick_then_deeper");
   const [voicePreference, setVoicePreference] = useState("friendly_excited");
+  const [voiceId, setVoiceId] = useState<string | null>(null);
+  const [voiceLabel, setVoiceLabel] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -132,6 +135,8 @@ export default function OnboardingPage() {
         favorite_topics: topics,
         explanation_depth: explanationDepth,
         voice_preference: voicePreference,
+        voice_id: voiceId,
+        voice_label: voiceLabel,
       });
       markOnboardingComplete();
       router.push("/ask");
@@ -259,16 +264,30 @@ export default function OnboardingPage() {
             )}
 
             {step === 4 && (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {VOICE_PREFERENCES.map((voice) => (
-                  <OptionButton
-                    key={voice.id}
-                    selected={voicePreference === voice.id}
-                    onClick={() => setVoicePreference(voice.id)}
-                    title={voice.label}
-                    description={voice.description}
+              <div className="space-y-5">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {VOICE_PREFERENCES.map((voice) => (
+                    <OptionButton
+                      key={voice.id}
+                      selected={voicePreference === voice.id}
+                      onClick={() => setVoicePreference(voice.id)}
+                      title={voice.label}
+                      description={voice.description}
+                    />
+                  ))}
+                </div>
+                <div className="space-y-2 border-t border-white/5 pt-4">
+                  <p className="text-sm text-foreground-muted">
+                    Pick the exact voice — preview any of them, including your own custom voices.
+                  </p>
+                  <VoicePicker
+                    voiceId={voiceId}
+                    onChange={(id, label) => {
+                      setVoiceId(id);
+                      setVoiceLabel(label);
+                    }}
                   />
-                ))}
+                </div>
               </div>
             )}
           </motion.div>
