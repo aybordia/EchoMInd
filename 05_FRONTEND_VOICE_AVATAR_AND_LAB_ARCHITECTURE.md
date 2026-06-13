@@ -30,11 +30,19 @@ Core packages:
 - `tailwindcss`
 - `three`
 - `@react-three/fiber`
-- `framer-motion`
+- `@react-three/drei` — Environment (HDRI), ContactShadows, Html labels, Text
+- `@react-three/postprocessing` — Bloom, SSAO, DepthOfField, Vignette, ToneMapping
+- `maath` — easing / smooth-damping for camera choreography
+- `framer-motion` — beat-card overlays and UI motion
 - `lucide-react`
+
+These power the real-time 3D Cinematic Engine. Its full spec (materials, lighting,
+postFX, camera, presets, components) is in
+[`07_CINEMATIC_RENDER_ENGINE.md`](07_CINEMATIC_RENDER_ENGINE.md).
 
 Optional:
 
+- `leva` (dev only) — live-tune lighting/postFX, stripped from prod
 - `zustand` for app state
 - `react-dropzone` for video upload
 - `wavesurfer.js` or simple canvas for audio waveform
@@ -309,24 +317,29 @@ Component:
 frontend/components/SimulationViewer.tsx
 ```
 
+This is a thin wrapper. The real rendering is the Cinematic Engine
+(`components/cinematic/CinematicStage.tsx`), specified fully in
+[`07_CINEMATIC_RENDER_ENGINE.md`](07_CINEMATIC_RENDER_ENGINE.md). `SimulationViewer`
+just receives an `AgentResult`, pulls its `simulation.cinematic_scene_spec`, and
+mounts `CinematicStage`.
+
 Responsibilities:
 
-- render live preview
-- receive WebSocket frames/status
-- show loading states
-- display camera controls if useful
-- overlay labels/arrows
-- support split-screen comparisons
+- pass the `CinematicSceneSpec` to `CinematicStage`
+- show loading states while the result is being prepared
+- toggle between scripted playback and free-explore (OrbitControls) modes
+- support split-screen / side-by-side for comparisons and video-twin
+- drop to the `diagram_fallback` preset if WebGL2 is unavailable (see 07 §8)
 
-Viewer modes:
+Viewer modes (all are presets of the same engine):
 
 ```text
-realtime_3d
-video_player
-diagram
+planet_jump
 molecule
+moon_drop
+ramp_box
 side_by_side
-fallback_card
+diagram_fallback
 ```
 
 ## 9. Cinematic Player
@@ -337,12 +350,16 @@ Component:
 frontend/components/CinematicPlayer.tsx
 ```
 
+`CinematicPlayer` is `CinematicStage` in scripted-playback mode plus playback UI.
+The default "film" is always the real-time 3D render; an AI-enhanced MP4, when
+present, appears as an alternate tab (see 07 §12).
+
 Responsibilities:
 
-- play final generated/rendered video
-- show progress while video is rendering
-- fallback to simulation replay if video unavailable
-- sync transcript/audio if possible
+- play the real-time 3D clip on the master clock (audio + visuals synced, 07 §9)
+- replay / scrub the clip
+- if an optional `video_url` exists, offer it as a "Film" tab; otherwise hide it
+- never block or error if the AI video is missing — real-time 3D is the deliverable
 
 ## 10. Diagram Overlay
 

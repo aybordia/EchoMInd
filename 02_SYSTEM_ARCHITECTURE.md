@@ -17,6 +17,23 @@ And produce four outputs:
 
 The architecture should be modular so each engine can fallback independently.
 
+### Locked Architecture Decisions
+
+These are decided, not open questions:
+
+1. **Cinematic Layer = real-time 3D first.** The guaranteed "looks real" output is
+   a browser WebGL engine (React Three Fiber + postprocessing + PBR + HDRI), driven
+   by a `CinematicSceneSpec`. AI video generation (Runway/Sora) and Blender are
+   optional polish layers, never on the critical path. See
+   [`07_CINEMATIC_RENDER_ENGINE.md`](07_CINEMATIC_RENDER_ENGINE.md).
+2. **Memory = always-on local file + Backboard sync.** A per-user JSON memory file
+   is the runtime source of truth and learns from every interaction; Backboard is
+   the durable sync target behind an adapter. The app runs fully without a Backboard
+   key. See [`08_BACKBOARD_MEMORY_AND_LEARNING.md`](08_BACKBOARD_MEMORY_AND_LEARNING.md).
+3. **Truth Layer and Cinematic Layer communicate only through the
+   `CinematicSceneSpec`.** Physics never leaks into the renderer; styling never
+   leaks into the physics.
+
 ## 2. High-Level Diagram
 
 ```text
@@ -557,6 +574,26 @@ Required fields:
 - `misconceptions_corrected`
 - `followups`
 - `audio_url`
+
+### Cinematic Scene Spec
+
+The single hand-off contract from the Truth Layer to the real-time 3D Cinematic
+Layer. The Render Director produces it; the frontend `CinematicStage` renders it.
+Defined in full in [`07_CINEMATIC_RENDER_ENGINE.md`](07_CINEMATIC_RENDER_ENGINE.md).
+
+Required top-level fields:
+
+- `preset` (planet_jump | molecule | moon_drop | ramp_box | diagram_fallback)
+- `environment` (hdri, background, fog, exposure)
+- `grade` (tone mapping, bloom, ssao, depth of field, vignette)
+- `objects` (with PBR material names + labels)
+- `trajectories` (engine-independent motion from the Truth Layer)
+- `annotations` (3D force arrows / labels)
+- `shots` (camera choreography)
+- `beats` (title / callout / equation / takeaway cards, synced to narration)
+
+Rule: the Truth Layer owns `trajectories`; the Cinematic Engine owns everything
+visual. They never blur.
 
 ## 8. External APIs And Tools
 

@@ -71,24 +71,30 @@ That is better than attempting everything and failing.
 
 ## 2. Visual Quality Bar
 
-The visuals should feel like a premium cinematic short-form science explainer: glossy 3D, dramatic lighting, clean labels, smooth camera motion, and satisfying diagrams.
+> The concrete, buildable version of this bar — exact stack, materials, lighting,
+> postFX, camera, and a per-scene acceptance checklist — is in
+> [`07_CINEMATIC_RENDER_ENGINE.md`](07_CINEMATIC_RENDER_ENGINE.md). This section is
+> the summary; 07 is the law.
 
-Do not copy any specific creator's exact style. Instead, implement these concrete visual traits:
+The visuals must feel like a premium cinematic short-form science explainer: glossy
+3D, real lighting, clean labels, smooth camera motion. **Flat diagrams or an
+unstyled physics applet are a failure, not an MVP.**
 
-- warm cinematic lighting
-- volumetric glow or bloom
-- soft shadows
-- dark or neutral premium background
-- glossy 3D materials
-- slow camera orbit during explanation
-- force arrows and labels in 3D space
+Implement these concrete visual traits (all guaranteed by the real-time 3D engine):
+
+- HDRI image-based lighting (real reflections) + a warm 3-point rig
+- glossy PBR materials (never flat colors)
+- soft contact shadows under every object
+- postFX: ACES tone mapping, bloom, SSAO, subtle depth of field, vignette
+- eased camera choreography with a slow-motion hero moment
+- force arrows and labels living in 3D space
 - split-screen comparisons
-- simple equation cards
-- final takeaway card
-- smooth easing and slow motion at the key moment
+- title / callout / equation / final-takeaway beat cards
+- dark graded premium background, never white/default
 - no raw developer UI
 
-The attached reference image shows the kind of polished 3D clarity to aim for: objects are readable, lighting feels cinematic, and the viewer immediately understands the scene. EchoMind should use that level of polish but apply it to science simulations with labels and diagrams.
+The target polish: high-end product-render clarity applied to science, with crisp
+labels. If a scene does not pass the 07 §13 checklist, it is not done.
 
 ## 3. Final Architecture To Implement
 
@@ -100,8 +106,13 @@ Read these first:
 4. `04_SIMULATION_VIDEO_DIGITAL_TWIN_ARCHITECTURE.md`
 5. `05_FRONTEND_VOICE_AVATAR_AND_LAB_ARCHITECTURE.md`
 6. `06_BACKEND_API_AND_SERVICE_SPEC.md`
+7. `07_CINEMATIC_RENDER_ENGINE.md` — **the "looks real" engine; read before any 3D work**
+8. `08_BACKBOARD_MEMORY_AND_LEARNING.md` — **the constant-context-learning loop**
 
 Then build according to this file.
+
+Two things are the soul of this product and must never be cut to save time: the
+**real-time 3D cinematic look** (07) and the **constant-context learning** (08).
 
 ## 4. Recommended Repo Structure
 
@@ -118,9 +129,10 @@ backend/
   services/
     scenario_interpreter.py
     simulation_templates.py
-    render_payloads.py
+    render_director.py          # builds the CinematicSceneSpec (07)
     tutor_agent.py
-    memory_manager.py
+    memory_manager.py           # always-on memory file (08)
+    backboard_client.py         # Backboard adapter (08 §6)
     voice_service.py
     video_twin.py
   models/
@@ -128,7 +140,7 @@ backend/
   static/
     jobs/
   data/
-    memory/
+    memory/                     # {user_id}.json constant-context learning files
 
 frontend/
   package.json
@@ -142,16 +154,32 @@ frontend/
   components/
     AskBar.tsx
     AgentTimeline.tsx
-    SimulationViewer.tsx
-    MoleculeViewer.tsx
-    PlanetJumpViewer.tsx
+    SimulationViewer.tsx        # thin wrapper around cinematic/CinematicStage
     DiagramOverlay.tsx
     TutorPanel.tsx
     FeedbackModal.tsx
     VideoTwinCompare.tsx
+    cinematic/                  # the real-time 3D engine (07 §11)
+      CinematicStage.tsx
+      SceneEnvironment.tsx
+      GradeComposer.tsx
+      CameraDirector.tsx
+      SceneObjects.tsx
+      Trajectory.tsx
+      ForceArrow.tsx
+      Label3D.tsx
+      BeatOverlay.tsx
+      MaterialLibrary.ts
+      usePerfTier.ts
+      useMasterClock.ts
+      presets/
+        planetJump.ts
+        molecule.ts
+        moonDrop.ts
+        rampBox.ts
   lib/
     api.ts
-    types.ts
+    types.ts                    # includes CinematicSceneSpec + AgentResult types
     speech.ts
     websocket.ts
 ```
@@ -359,12 +387,17 @@ Ruthless MVP behavior:
 
 Use deterministic classification first. LLM can improve later.
 
-If question contains:
+Classify the question into a `preset` that matches the cinematic preset names in
+07 exactly (`planet_jump | molecule | moon_drop | ramp_box | diagram_fallback`), so
+the same string flows from interpreter → Render Director → frontend with no
+renaming:
 
 - `planet`, `jump`, `solar system` -> `planet_jump`
-- `molecule`, `water`, `sodium`, `chlorine`, `bond` -> `molecule_interaction`
+- `molecule`, `water`, `sodium`, `chlorine`, `bond` -> `molecule`
 - `moon`, `feather`, `bowling ball` -> `moon_drop`
-- otherwise -> generic fallback that maps to `planet_jump` with a note
+- `ramp`, `incline`, `slide`, `box` (or video upload) -> `ramp_box`
+- otherwise -> `diagram_fallback` (still cinematic) with an assumption note, or map
+  to `planet_jump` if the question is clearly about gravity
 
 Function:
 
@@ -700,73 +733,81 @@ Flow:
 8. show follow-up chips
 9. show feedback modal
 
-## 20. Step 15 - Cinematic 3D Viewer
+## 20. Step 15 - Cinematic 3D Engine (the "looks real" core)
 
-Create `frontend/components/SimulationViewer.tsx`.
+> Build this exactly per [`07_CINEMATIC_RENDER_ENGINE.md`](07_CINEMATIC_RENDER_ENGINE.md).
+> Do not improvise the look. This is the single most important visual step — get the
+> engine right once and every preset inherits the film quality.
 
-It should switch by payload type:
+Build the engine under `frontend/components/cinematic/` (07 §11):
 
-```text
-planet_jump
-molecule_interaction
-moon_drop
-ramp_box
-fallback_diagram
-```
+1. `MaterialLibrary.ts` — the named PBR materials (07 §5).
+2. `SceneEnvironment.tsx` — HDRI `<Environment>`, graded dark background, fog,
+   3-point light rig, `<ContactShadows>` (07 §4).
+3. `GradeComposer.tsx` — the postFX stack in exact order: SSAO → Bloom →
+   DepthOfField → ChromaticAberration → Vignette → ACES ToneMapping (07 §6).
+4. `CameraDirector.tsx` — plays `spec.shots` on the master clock with eased moves
+   and the slow-mo hero window (07 §7).
+5. `SceneObjects.tsx` + `Trajectory.tsx` — instantiate `spec.objects` and drive
+   them from `spec.trajectories`.
+6. `ForceArrow.tsx` + `Label3D.tsx` — 3D arrows and anchored labels (07 annotations).
+7. `BeatOverlay.tsx` — title / callout / equation / takeaway cards synced to
+   `spec.beats` (07 §9).
+8. `usePerfTier.ts` + `useMasterClock.ts` — fps tiering (07 §8) and the single
+   audio+visual clock (07 §9).
+9. `CinematicStage.tsx` — mounts all of the above from a `CinematicSceneSpec`.
 
-Build with React Three Fiber when possible.
+`SimulationViewer.tsx` becomes a thin wrapper that reads
+`result.simulation.cinematic_scene_spec` and renders `CinematicStage`.
 
-Visual requirements:
+Acceptance: run the cinematic checklist in 07 §13 against a hand-written sample
+spec before wiring real data. If any box fails, fix the look first.
 
-- bloom-like glow using materials/lights if postprocessing is not installed
-- smooth camera orbit
-- 3D labels using HTML overlays or positioned divs
-- force arrows as cylinders/cones or SVG overlay
-- split panels for comparisons
-- final takeaway card
+## 21. Step 16 - Planet Jump Preset
 
-If Three.js becomes too slow, use canvas/SVG for diagrams but keep the visual polish.
+Create `frontend/components/cinematic/presets/planetJump.ts`.
 
-## 21. Step 16 - Planet Jump Viewer
+It returns a complete `CinematicSceneSpec` (preset `planet_jump`) per the recipe in
+07 §10.1. The Render Director calls it and overrides only the computed values.
 
-Create `PlanetJumpViewer.tsx`.
+Must produce:
 
-Must show:
+- planets along a gentle arc (not a flat row), each a glossy sphere with a capsule
+  figure standing on it
+- gravity + jump-height labels per planet
+- a `gravity` force arrow on the hero figure
+- camera shots: establish → push-to-Moon hero (slow-mo) → wide compare
+- highlighted comparison: Moon vs Earth vs Jupiter glow brighter
+- beats: title → "same push, different gravity" → equation `h=v₀²/2g` → takeaway
 
-- planets in a row/grid
-- figure or capsule jumping on each planet
-- gravity label
-- jump height label
-- slow-motion loop
-- highlighted comparison: Moon vs Earth vs Jupiter
-
-Minimum animation:
+Jump motion (the Truth Layer fills the trajectory):
 
 ```text
 y(t) = v0*t - 0.5*g*t²
 ```
 
-Use normalized scale so jumps look readable.
+Use normalized scale so jumps stay readable across very different gravities.
 
-## 22. Step 17 - Molecule Viewer
+## 22. Step 17 - Molecule Preset
 
-Create `MoleculeViewer.tsx`.
+Create `frontend/components/cinematic/presets/molecule.ts`.
 
-Must show:
+Returns a `CinematicSceneSpec` (preset `molecule`) per 07 §10.2.
 
-- atoms as glossy spheres
-- bonds as cylinders
-- partial charge labels
-- attraction arrows
-- slow approach animation
-- simplified energy/interaction diagram
+Must produce:
+
+- atoms as `atom_glossy` spheres, bonds as `bond_metal` cylinders
+- semi-transparent `electron_cloud` shells (transmission material)
+- partial-charge labels and an emissive attraction/hydrogen-bond arc
+- slow approach animation; slow-mo bloom pulse when the bond forms
+- a simplified energy/interaction beat card
 
 For water-water:
 
-- oxygen red-ish
-- hydrogen white/blue-ish
-- dotted hydrogen bond line
+- oxygen red-ish (`#ff5a5a`), hydrogen white/blue-ish (`#f4f6ff`)
+- dotted/emissive hydrogen-bond line
 - label: `partial negative oxygen attracts partial positive hydrogen`
+- mandatory disclaimer beat: "Simplified model — not full quantum chemistry."
 
 Do not claim full quantum accuracy.
 
@@ -983,9 +1024,13 @@ The MVP is done only when:
 - molecule viewer works
 - video twin fallback works
 - 1-5 star feedback works
-- future response adapts to stored preferences
-- visuals are polished, labeled, and cinematic
-- app survives missing external API keys
+- future response adapts to stored preferences (passes the 08 §9 checklist)
+- every rendered scene passes the cinematic checklist in 07 §13
+- app survives missing external API keys (including no Backboard key)
 - demo can be completed in under 3 minutes
 
 If any of these fail, do not add new features. Fix the core loop first.
+
+The two soul features — the real-time 3D look (07 §13) and the constant-context
+learning (08 §9) — are the difference between a demo and a winner. Never ship with
+either one half-done.

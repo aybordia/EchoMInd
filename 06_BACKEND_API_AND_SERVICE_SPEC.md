@@ -63,6 +63,7 @@ backend/
     render_director.py
     tutor_agent.py
     memory_manager.py
+    backboard_client.py
     video_twin.py
     molecule_engine.py
     voice_service.py
@@ -172,6 +173,65 @@ class AgentJob(BaseModel):
     fallback_used: bool = False
 ```
 
+### AgentResult
+
+The full payload returned by `GET /api/agent/result/{job_id}` and written to
+`result.json`. This is the contract the frontend renders.
+
+```python
+class SimulationOut(BaseModel):
+    engine: str                       # template | mujoco | analytic
+    preset: str                       # planet_jump | molecule | moon_drop | ramp_box | diagram_fallback
+    cinematic_scene_spec: dict        # the CinematicSceneSpec (see 07) — drives the 3D
+    trajectory_url: str | None = None
+    diagram_url: str | None = None
+    video_url: str | None = None      # optional AI-enhanced clip; null is fine
+
+class TeachingOut(BaseModel):
+    transcript: str
+    key_takeaway: str
+    concepts_explained: list[str]
+    misconceptions_corrected: list[str] = []
+    followups: list[str]
+    audio_url: str | None = None      # null → frontend uses browser TTS
+    visual_style_instructions: dict = {}
+
+class AgentResult(BaseModel):
+    job_id: str
+    status: str                       # complete | failed_with_fallback
+    scenario: Scenario
+    simulation: SimulationOut
+    teaching: TeachingOut
+    fallback_used: bool = False
+```
+
+### DigitalTwinPayload
+
+Returned by the video-twin route (and embeddable as a `ramp_box` scene spec).
+
+```python
+class DigitalTwinPayload(BaseModel):
+    type: str = "ramp_box"
+    ramp_angle_deg: float
+    friction_coefficient_estimate: float
+    trajectory: list                  # engine-independent position keys
+    concepts: list[str]
+    estimated: bool = True            # true when reconstruction is approximate
+
+class VideoTwinResult(BaseModel):
+    job_id: str
+    status: str
+    original_video_url: str
+    cinematic_scene_spec: dict        # a ramp_box CinematicSceneSpec (see 07)
+    digital_twin_payload: DigitalTwinPayload
+    teaching: TeachingOut
+```
+
+The `CinematicSceneSpec` itself is defined in
+[`07_CINEMATIC_RENDER_ENGINE.md`](07_CINEMATIC_RENDER_ENGINE.md). The backend
+treats it as a `dict` produced by the Render Director; the frontend has the typed
+version in `frontend/lib/types.ts`.
+
 ## 6. API Routes
 
 ### Health
@@ -212,6 +272,16 @@ Request:
   "session_id": "session_123",
   "user_id": "user_123",
   "student_level": "middle_school"
+}
+```
+
+Response:
+
+```json
+{
+  "job_id": "job_123",
+  "status": "queued",
+  "message": "I'll build that simulation now."
 }
 ```
 
@@ -278,16 +348,6 @@ Response:
 {
   "status": "stored",
   "next_adaptation": "Future explanations will show the visual first, then a single equation card."
-}
-```
-
-Response:
-
-```json
-{
-  "job_id": "job_123",
-  "status": "queued",
-  "message": "I'll build that simulation now."
 }
 ```
 
@@ -492,16 +552,24 @@ Inputs:
 - trajectory
 - scenario
 - annotations
+- student context (for visual style / pace via memory)
 
-Outputs:
+Primary output:
 
-- preview frames
-- final video
-- diagram
+- a **`CinematicSceneSpec`** (see [`07_CINEMATIC_RENDER_ENGINE.md`](07_CINEMATIC_RENDER_ENGINE.md))
+  built from the chosen preset's defaults, overriding only objects, trajectories,
+  annotations, camera shots, and beats. This is the main deliverable — the
+  real-time 3D engine renders it in the browser.
+
+Optional outputs:
+
+- diagram PNG (always useful as a thumbnail/fallback)
+- AI-enhanced `final.mp4` only when `video_enhancement.requested` and a key exists
 
 Fallback:
 
-- diagram-only or FFmpeg stitched frames
+- `diagram_fallback` preset (still graded, labeled, with beat cards) — never a raw
+  failure. AI video is never on the critical path.
 
 ### Tutor Agent
 
@@ -544,13 +612,19 @@ Fallback:
 
 - local JSON files
 
-Backboard behavior:
+Backboard behavior — fully specified in
+[`08_BACKBOARD_MEMORY_AND_LEARNING.md`](08_BACKBOARD_MEMORY_AND_LEARNING.md):
 
+- The always-on **local memory file** (`backend/data/memory/{user_id}.json`) is the
+  runtime source of truth; Backboard is the durable sync target via `BackboardClient`.
 - Before `POST /api/agent/ask` finishes interpretation, retrieve student context.
 - Pass the context to the scenario interpreter and tutor agent.
 - After a completed simulation, write concepts learned and misconceptions corrected.
 - After `POST /api/onboarding`, write explicit learning preferences.
-- After `POST /api/feedback`, write rating, chips, free text, and behavior metrics.
+- After `POST /api/feedback`, run the deterministic adaptation rules (08 §5) to
+  mutate preferences, then write rating, chips, free text, and behavior metrics.
+- The app must work fully with `BACKBOARD_API_KEY` unset (file-only). Backboard is
+  additive, never load-bearing.
 - Never expose `BACKBOARD_API_KEY` to the frontend.
 
 Example Backboard write for feedback:

@@ -197,14 +197,29 @@ Options:
 
 ## 4. Cinematic Video Strategy
 
-The most important quality decision:
+> The full, concrete cinematic spec lives in
+> [`07_CINEMATIC_RENDER_ENGINE.md`](07_CINEMATIC_RENDER_ENGINE.md). This section is
+> the summary of how simulation data becomes that cinematic output.
 
-Do not rely only on text-to-video for scientific accuracy.
+The most important quality decision (now locked):
+
+**Real-time 3D is the primary cinematic layer.** The Truth Layer (this file)
+produces engine-independent `trajectories` and parameters; the Render Director
+packages them into a `CinematicSceneSpec`; the browser renders that spec as a
+graded, PBR-lit, postprocessed 3D film. Text-to-video is an OPTIONAL enhancement
+layer, never the source of scientific truth and never on the critical path.
+
+The hand-off is exactly one object:
+
+```text
+Truth Layer (trajectories + params)  ->  CinematicSceneSpec  ->  real-time 3D engine
+                                              (optional)  ->  AI video enhancement
+```
 
 Recommended pipeline:
 
 ```text
-simulation data -> deterministic keyframes/images -> cinematic enhancement -> overlays/narration
+simulation data -> CinematicSceneSpec -> real-time 3D render -> (optional) AI cinematic enhancement -> overlays/narration
 ```
 
 ### Why
@@ -519,9 +534,20 @@ Frontend:
 ```text
 frontend/app/ask/page.tsx
 frontend/app/video-twin/page.tsx
-frontend/components/SimulationViewer.tsx
-frontend/components/CinematicPlayer.tsx
+frontend/components/SimulationViewer.tsx        # thin wrapper around CinematicStage
+frontend/components/CinematicPlayer.tsx         # scripted playback + replay/scrub
 frontend/components/DiagramOverlay.tsx
 frontend/components/VideoTwinCompare.tsx
-frontend/components/MoleculeViewer.tsx
+frontend/components/cinematic/                  # the real-time 3D engine (see 07 §11)
+  CinematicStage.tsx
+  SceneEnvironment.tsx
+  GradeComposer.tsx
+  CameraDirector.tsx
+  SceneObjects.tsx
+  Trajectory.tsx
+  ForceArrow.tsx
+  Label3D.tsx
+  BeatOverlay.tsx
+  MaterialLibrary.ts
+  presets/
 ```
