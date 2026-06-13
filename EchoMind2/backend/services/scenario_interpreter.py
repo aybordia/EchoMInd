@@ -1,13 +1,21 @@
-"""Deterministic question -> Scenario classifier.
+"""Question -> Scenario classifier.
 
-MVP rule: use keyword matching first. An LLM-backed interpreter can be
-layered on later without changing this contract.
+When `OPENAI_API_KEY` is set, an LLM classifies the question into the right
+simulation and enriches the title/concepts/takeaway, so arbitrary questions
+map accurately instead of always defaulting to a planet jump. Keyword
+matching is the deterministic fallback used when no key is present or the LLM
+call fails, so the product never breaks.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import uuid
 from typing import Any
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+OPENAI_MODEL = os.getenv("ECHOMIND_LLM_MODEL", "gpt-4o-mini").strip()
 
 MOLECULE_KEYWORDS = [
     "molecule", "molecules", "water", "h2o", "sodium", "chlorine",
@@ -26,8 +34,25 @@ def _new_id(prefix: str) -> str:
 
 
 def interpret_question(question: str, student_context: dict[str, Any]) -> dict[str, Any]:
-    q = question.lower()
     level = student_context.get("student_level", "middle_school")
+
+    llm = _llm_classify(question)
+    if llm is not None:
+        category = llm.get("category")
+        if category == "molecule_interaction":
+            return _molecule_scenario(question, level, ionic_hint=llm.get("ionic"))
+        if category == "moon_drop":
+            return _moon_drop_scenario(question, level)
+        if category == "planet_jump":
+            return _planet_jump_scenario(question, level, fallback=False)
+        # Anything the 3D templates can't faithfully render -> honest diagram.
+        return _generic_scenario(question, level, llm)
+
+    return _keyword_interpret(question, level)
+
+
+def _keyword_interpret(question: str, level: str) -> dict[str, Any]:
+    q = question.lower()
 
     if any(k in q for k in MOLECULE_KEYWORDS):
         return _molecule_scenario(question, level)
@@ -41,6 +66,81 @@ def interpret_question(question: str, student_context: dict[str, Any]) -> dict[s
         return _planet_jump_scenario(question, level, fallback=False)
 
     return _planet_jump_scenario(question, level, fallback=True)
+
+
+def _llm_classify(question: str) -> dict[str, Any] | None:
+    """Classify the question into a renderable simulation. Returns None when no
+    key is set or the call fails, so callers fall back to keyword matching."""
+    if not OPENAI_API_KEY:
+        return None
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        system = (
+            "You route a student's science question to ONE simulation EchoMind can render. "
+            "Categories: 'planet_jump' (gravity/jumping/weight across planets or the Moon), "
+            "'moon_drop' (two objects falling, air resistance, free fall), "
+            "'molecule_interaction' (molecules/atoms/bonds/charges; set ionic=true for "
+            "salt/ionic/metal+nonmetal, else false for polar/hydrogen-bond), "
+            "'diagram' (anything else: astrophysics, biology, weather, large-scale, unsafe). "
+            "Reply ONLY with compact JSON: "
+            '{"category": "...", "ionic": true|false, "title": "...", '
+            '"concepts": ["..."], "takeaway": "...", "misconception": "..."}'
+        )
+        resp = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": question},
+            ],
+            temperature=0.2,
+            max_tokens=300,
+            response_format={"type": "json_object"},
+        )
+        data = json.loads(resp.choices[0].message.content or "{}")
+        if data.get("category") in {
+            "planet_jump",
+            "moon_drop",
+            "molecule_interaction",
+            "diagram",
+        }:
+            return data
+        return None
+    except Exception:
+        return None
+
+
+def _generic_scenario(question: str, level: str, llm: dict[str, Any]) -> dict[str, Any]:
+    """A real (diagram) scenario for questions outside the 3D template set,
+    enriched by the LLM so it is accurate rather than a fake planet jump."""
+    return _base_scenario(
+        scenario_id=_new_id("scenario"),
+        title=llm.get("title") or "Science Explainer",
+        domain="diagram_only",
+        question=question,
+        concepts=llm.get("concepts") or ["core principle"],
+        objects=[],
+        environment={},
+        known_values={},
+        assumptions=[
+            "EchoMind built a guided diagram explainer because this question is best "
+            "shown conceptually rather than as one of its built-in 3D simulations.",
+        ],
+        simulation_plan={
+            "engine": "diagram",
+            "duration_s": 6,
+            "comparison_count": 1,
+            "needs_cinematic_render": True,
+            "needs_diagram": True,
+        },
+        teaching_plan={
+            "level": level,
+            "misconception_to_address": llm.get("misconception"),
+            "core_takeaway": llm.get("takeaway")
+            or "Here is the key idea behind your question.",
+        },
+    )
 
 
 def _base_scenario(
@@ -151,9 +251,9 @@ def _moon_drop_scenario(question: str, level: str) -> dict[str, Any]:
     )
 
 
-def _molecule_scenario(question: str, level: str) -> dict[str, Any]:
+def _molecule_scenario(question: str, level: str, ionic_hint: bool | None = None) -> dict[str, Any]:
     q = question.lower()
-    ionic = any(k in q for k in IONIC_KEYWORDS)
+    ionic = ionic_hint if ionic_hint is not None else any(k in q for k in IONIC_KEYWORDS)
 
     if ionic:
         return _base_scenario(

@@ -40,7 +40,13 @@ def _write_json(path: str, data: Any) -> None:
         json.dump(data, f, indent=2)
 
 
-async def _run_pipeline(question: str, session_id: str, user_id: str, student_level: str) -> dict[str, Any]:
+async def _run_pipeline(
+    question: str,
+    session_id: str,
+    user_id: str,
+    student_level: str,
+    voice_id: str | None = None,
+) -> dict[str, Any]:
     job_id = f"job_{uuid.uuid4().hex[:10]}"
     job_dir = os.path.join(JOBS_DIR, job_id)
     os.makedirs(job_dir, exist_ok=True)
@@ -54,7 +60,10 @@ async def _run_pipeline(question: str, session_id: str, user_id: str, student_le
     teaching = tutor_agent.build_teaching_result(scenario, sim_payload, student_context)
 
     voice_pref = student_context.get("presentation_preferences", {}).get("voice_style", "friendly_excited")
-    audio_url = await voice_service.synthesize_voice(teaching["transcript"], job_id, voice_pref)
+    chosen_voice = voice_id or student_context.get("voice_id")
+    audio_url = await voice_service.synthesize_voice(
+        teaching["transcript"], job_id, voice_pref, chosen_voice
+    )
     teaching["audio_url"] = audio_url
     teaching["spoken_audio_url"] = audio_url
 
@@ -90,7 +99,9 @@ async def _run_pipeline(question: str, session_id: str, user_id: str, student_le
 
 @router.post("/agent/ask")
 async def ask_agent(req: AskRequest) -> dict[str, Any]:
-    return await _run_pipeline(req.question, req.session_id, req.user_id, req.student_level)
+    return await _run_pipeline(
+        req.question, req.session_id, req.user_id, req.student_level, req.voice_id
+    )
 
 
 @router.get("/agent/result/{job_id}")
@@ -104,4 +115,10 @@ async def get_agent_result(job_id: str) -> dict[str, Any]:
 
 @router.post("/agent/followup")
 async def followup_agent(req: FollowupRequest) -> dict[str, Any]:
-    return await _run_pipeline(req.followup, req.session_id, req.user_id, "")
+    return await _run_pipeline(req.followup, req.session_id, req.user_id, "", req.voice_id)
+
+
+@router.get("/voices")
+async def get_voices() -> list[dict[str, Any]]:
+    """Selectable voices for the student's picker (proxies ElevenLabs)."""
+    return await voice_service.list_voices()

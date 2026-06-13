@@ -16,6 +16,8 @@ export interface OnboardingRequest {
   favorite_topics: string[];
   explanation_depth: string;
   voice_preference: string;
+  voice_id?: string | null;
+  voice_label?: string | null;
 }
 
 export interface OnboardingResponse {
@@ -44,6 +46,7 @@ export interface AskRequest {
   user_id: string;
   student_level?: string;
   mode?: string;
+  voice_id?: string | null;
 }
 
 export interface FollowupRequest {
@@ -51,6 +54,15 @@ export interface FollowupRequest {
   followup: string;
   session_id: string;
   user_id: string;
+  voice_id?: string | null;
+}
+
+export interface Voice {
+  voice_id: string;
+  name: string;
+  style_label: string;
+  preview_url: string | null;
+  category: string;
 }
 
 export interface Scenario {

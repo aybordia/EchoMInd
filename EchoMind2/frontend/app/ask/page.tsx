@@ -9,6 +9,7 @@ import { FeedbackModal } from "@/components/FeedbackModal";
 import { NavBar } from "@/components/NavBar";
 import { SimulationViewer } from "@/components/SimulationViewer";
 import { TutorPanel } from "@/components/TutorPanel";
+import { VoicePicker } from "@/components/VoicePicker";
 import { askAgent, followupAgent } from "@/lib/api";
 import { AGENT_STAGES, SAMPLE_PROMPTS } from "@/lib/constants";
 import { useEchoSession } from "@/lib/session";
@@ -47,6 +48,7 @@ function AskPageContent() {
   const [resultReady, setResultReady] = useState(false);
   const [timelineKey, setTimelineKey] = useState(0);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [voiceId, setVoiceId] = useState<string | null>(null);
 
   const autoSubmitted = useRef(false);
 
@@ -72,9 +74,13 @@ function AskPageContent() {
   const handleAsk = useCallback(
     (q: string) => {
       if (!sessionId || !userId) return;
-      runRequest(() => askAgent({ question: q, session_id: sessionId, user_id: userId }), q);
+      runRequest(
+        () =>
+          askAgent({ question: q, session_id: sessionId, user_id: userId, voice_id: voiceId }),
+        q
+      );
     },
-    [sessionId, userId, runRequest]
+    [sessionId, userId, runRequest, voiceId]
   );
 
   const handleFollowup = useCallback(
@@ -87,11 +93,12 @@ function AskPageContent() {
             followup: q,
             session_id: sessionId,
             user_id: userId,
+            voice_id: voiceId,
           }),
         q
       );
     },
-    [sessionId, userId, result, runRequest]
+    [sessionId, userId, result, runRequest, voiceId]
   );
 
   useEffect(() => {
@@ -129,6 +136,11 @@ function AskPageContent() {
         </div>
 
         <AskBar onSubmit={handleAsk} loading={view === "running"} initialValue={initialQuestion} />
+
+        <div className="flex flex-wrap items-center gap-2 text-xs text-foreground-subtle">
+          <span>Tutor voice:</span>
+          <VoicePicker voiceId={voiceId} onChange={(id) => setVoiceId(id)} />
+        </div>
 
         {view === "idle" && (
           <div className="flex flex-wrap gap-2">

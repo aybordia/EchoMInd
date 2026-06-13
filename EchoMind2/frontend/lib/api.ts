@@ -13,6 +13,7 @@ import type {
   OnboardingResponse,
   SessionResponse,
   VideoTwinUploadResponse,
+  Voice,
 } from "./types";
 
 export const BACKEND_URL =
@@ -56,6 +57,10 @@ export function submitOnboarding(
 
 export function getMemory(userId: string): Promise<MemorySummary> {
   return request<MemorySummary>(`/api/memory/${encodeURIComponent(userId)}`);
+}
+
+export function listVoices(): Promise<Voice[]> {
+  return request<Voice[]>("/api/voices");
 }
 
 export function askAgent(payload: AskRequest): Promise<AgentResult> {
