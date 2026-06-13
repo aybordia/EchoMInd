@@ -16,7 +16,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from models.schemas import AskRequest, FollowupRequest
-from services import memory_manager, scenario_interpreter, simulation_templates, tutor_agent, voice_service
+from services import llm_interpreter, memory_manager, scenario_interpreter, simulation_templates, tutor_agent, voice_service
 
 router = APIRouter()
 
@@ -55,9 +55,22 @@ async def _run_pipeline(
     if student_level:
         student_context["student_level"] = student_level
 
-    scenario = scenario_interpreter.interpret_question(question, student_context)
-    sim_payload = simulation_templates.build_simulation_payload(scenario)
-    teaching = tutor_agent.build_teaching_result(scenario, sim_payload, student_context)
+    llm_result = await llm_interpreter.interpret_with_llm(question, student_context)
+
+    if llm_result and llm_result.get("use_known") is False:
+        scenario = llm_interpreter.build_dynamic_scenario(llm_result, question)
+        sim_payload = llm_interpreter.build_dynamic_simulation_payload(scenario)
+        teaching = llm_interpreter.build_dynamic_teaching(scenario, sim_payload, student_context)
+    elif llm_result and llm_result.get("use_known") is True:
+        scenario = scenario_interpreter.interpret_question(question, student_context)
+        if llm_result.get("domain"):
+            scenario["domain"] = llm_result["domain"]
+        sim_payload = simulation_templates.build_simulation_payload(scenario)
+        teaching = tutor_agent.build_teaching_result(scenario, sim_payload, student_context)
+    else:
+        scenario = scenario_interpreter.interpret_question(question, student_context)
+        sim_payload = simulation_templates.build_simulation_payload(scenario)
+        teaching = tutor_agent.build_teaching_result(scenario, sim_payload, student_context)
 
     voice_pref = student_context.get("presentation_preferences", {}).get("voice_style", "friendly_excited")
     chosen_voice = voice_id or student_context.get("voice_id")
@@ -67,11 +80,10 @@ async def _run_pipeline(
     teaching["audio_url"] = audio_url
     teaching["spoken_audio_url"] = audio_url
 
-    # Per-beat narration so the guided journey can pause and speak each step.
-    beats = teaching.get("beats", [])
-    beat_audio = await voice_service.synthesize_beats(beats, job_id, voice_pref, chosen_voice)
-    for beat in beats:
-        beat["audio_url"] = beat_audio.get(beat.get("id"))
+    if sim_payload.get("journey_waypoints"):
+        sim_payload["journey_waypoints"] = await voice_service.synthesize_waypoint_voices(
+            sim_payload["journey_waypoints"], job_id, voice_pref, chosen_voice
+        )
 
     simulation = {**sim_payload, "viewer_url": f"/sim/{job_id}"}
 
@@ -126,5 +138,4 @@ async def followup_agent(req: FollowupRequest) -> dict[str, Any]:
 
 @router.get("/voices")
 async def get_voices() -> list[dict[str, Any]]:
-    """Selectable voices for the student's picker (proxies ElevenLabs)."""
     return await voice_service.list_voices()

@@ -2,16 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles } from "lucide-react";
+import { Settings, Sparkles } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { AuthAction } from "./AuthAction";
 
 const LINKS = [
   { href: "/ask", label: "Ask" },
   { href: "/video-twin", label: "Video Twin" },
   { href: "/onboarding", label: "Onboarding" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export function NavBar() {
   const pathname = usePathname();
+  const { data } = useSession();
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/5 bg-background/70 backdrop-blur-xl">
@@ -22,7 +26,7 @@ export function NavBar() {
             EchoMind
           </span>
         </Link>
-        <div className="flex items-center gap-1 text-sm">
+        <div className="flex items-center gap-2 text-sm">
           {LINKS.map((link) => {
             const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
             return (
@@ -39,6 +43,13 @@ export function NavBar() {
               </Link>
             );
           })}
+          {data?.user?.email ? (
+            <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-foreground-muted sm:flex">
+              <Settings className="h-3.5 w-3.5 text-accent-soft" />
+              {data.user.email}
+            </div>
+          ) : null}
+          <AuthAction callbackUrl="/ask" variant="secondary" />
         </div>
       </nav>
     </header>

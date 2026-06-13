@@ -194,6 +194,57 @@ export interface RampBoxPayload {
   viewer_url?: string;
 }
 
+export interface DynamicComparison {
+  label: string;
+  value: number;
+  unit: string;
+  color: string;
+}
+
+export interface DynamicEquation {
+  label: string;
+  formula: string;
+  explanation: string;
+}
+
+export interface DynamicVariable {
+  name: string;
+  symbol: string;
+  value: number;
+  unit: string;
+}
+
+export interface DynamicObject {
+  name: string;
+  shape: string;
+  color: string;
+  mass_kg?: number;
+  size?: number;
+}
+
+export interface DynamicKeyframe {
+  t: number;
+  description: string;
+}
+
+export interface DynamicPayload {
+  type: "dynamic";
+  title: string;
+  subtitle: string;
+  physics_type: string;
+  objects: DynamicObject[];
+  environment: Record<string, unknown>;
+  sim_type: string;
+  duration_s: number;
+  keyframes: DynamicKeyframe[];
+  equations: DynamicEquation[];
+  variables: DynamicVariable[];
+  comparisons: DynamicComparison[];
+  takeaway: string;
+  labels: string[];
+  viewer_url?: string;
+}
+
 export interface FallbackDiagramPayload {
   type: "fallback_diagram";
   title: string;
@@ -208,6 +259,7 @@ export type SimulationPayload =
   | MoonDropPayload
   | MoleculeInteractionPayload
   | RampBoxPayload
+  | DynamicPayload
   | FallbackDiagramPayload;
 
 export interface VisualStyleInstructions {
@@ -263,6 +315,16 @@ export interface MemorySummary {
   summary: string;
   concepts_seen: string[];
   suggested_questions: string[];
+  learning_style: string[];
+  favorite_visual_style: string;
+  explanation_depth: string;
+  presentation_preferences: Record<string, string>;
+  interests: string[];
+  onboarding_complete: boolean;
+  feedback_count: number;
+  last_feedback_rating: number | null;
+  personalization_summary: string;
+  backboard_enabled: boolean;
 }
 
 export const LEARNING_STYLES = [

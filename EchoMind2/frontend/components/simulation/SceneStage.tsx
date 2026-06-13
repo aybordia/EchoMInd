@@ -29,11 +29,8 @@ interface OrbitLike {
   update: () => void;
 }
 
-/** A scripted camera move: where to look, and where the camera should sit. */
 export interface CameraFocus {
-  /** World point to look at. */
   lookAt: [number, number, number];
-  /** World position for the camera. */
   position: [number, number, number];
 }
 
@@ -45,22 +42,13 @@ interface SceneStageProps {
   minDistance?: number;
   maxDistance?: number;
   enableZoom?: boolean;
-  /** Deep-space starfield (planets/moon) vs a clean studio void (molecules/ramp). */
+  disableOrbitControls?: boolean;
   starfield?: boolean;
-  /** Soft contact shadow on the ground plane. */
   groundShadow?: boolean;
-  /** Tint of the key light. */
   keyColor?: string;
-  /**
-   * When provided, the camera is "directed": it eases to this framing and
-   * auto-rotation pauses. Pass `null` to return to a wide, auto-rotating
-   * overview. Omit entirely to keep the default free-orbit behavior.
-   */
   cameraFocus?: CameraFocus | null;
 }
 
-/** Eases the camera + orbit target toward a scripted focus, or back to a wide
- *  auto-rotating overview when focus is null. Drives the journey's cinematics. */
 function CameraDirector({
   focus,
   overview,
@@ -90,13 +78,6 @@ function CameraDirector({
   return null;
 }
 
-/**
- * Shared cinematic stage — the "looks real" baseline for every viewer:
- * inline image-based lighting (offline-safe), a 3-point rig, soft contact
- * shadows, and a postprocessing grade (N8AO ambient occlusion, bloom, subtle
- * depth of field, vignette, ACES tone mapping).
- * See 07_CINEMATIC_RENDER_ENGINE.md.
- */
 export function SceneStage({
   children,
   cameraPosition = [0, 2.5, 9],
@@ -105,6 +86,7 @@ export function SceneStage({
   minDistance = 3,
   maxDistance = 22,
   enableZoom = true,
+  disableOrbitControls = false,
   starfield = true,
   groundShadow = true,
   keyColor = "#fff3e0",
@@ -127,14 +109,12 @@ export function SceneStage({
         <color attach="background" args={["#05060a"]} />
         <fog attach="fog" args={["#05060a", 16, 42]} />
 
-        {/* Image-based lighting — inline lightformers, no remote HDR fetch (works offline). */}
         <Environment resolution={256} frames={1}>
           <Lightformer intensity={2.4} color={keyColor} position={[6, 8, 6]} scale={[12, 12, 1]} />
           <Lightformer intensity={0.9} color="#7dd3fc" position={[-9, 4, -6]} scale={[10, 10, 1]} />
           <Lightformer intensity={1.6} color="#c4b5fd" position={[0, -6, 4]} scale={[10, 6, 1]} />
         </Environment>
 
-        {/* Direct 3-point rig on top of IBL for crisp highlights and real shadows. */}
         <ambientLight intensity={0.25} />
         <directionalLight
           position={[6, 9, 6]}
@@ -147,9 +127,7 @@ export function SceneStage({
         <pointLight position={[-8, 4, -6]} intensity={0.6} color="#7dd3fc" />
         <pointLight position={[0, 6, -8]} intensity={1.4} color="#ffffff" />
 
-        {starfield && (
-          <Stars radius={120} depth={60} count={2600} factor={3.6} fade speed={0.4} />
-        )}
+        {starfield && <Stars radius={120} depth={60} count={2600} factor={3.6} fade speed={0.4} />}
 
         {children}
 
@@ -165,23 +143,21 @@ export function SceneStage({
           />
         )}
 
-        <OrbitControls
-          makeDefault
-          enablePan={false}
-          enableZoom={enableZoom}
-          autoRotate
-          autoRotateSpeed={autoRotateSpeed}
-          minDistance={minDistance}
-          maxDistance={maxDistance}
-          maxPolarAngle={Math.PI / 1.7}
-        />
-
-        {directed && (
-          <CameraDirector
-            focus={cameraFocus}
-            overview={cameraPosition}
+        {!disableOrbitControls && (
+          <OrbitControls
+            makeDefault
+            enablePan={false}
+            enableZoom={enableZoom}
+            autoRotate
             autoRotateSpeed={autoRotateSpeed}
+            minDistance={minDistance}
+            maxDistance={maxDistance}
+            maxPolarAngle={Math.PI / 1.7}
           />
+        )}
+
+        {directed && !disableOrbitControls && (
+          <CameraDirector focus={cameraFocus} overview={cameraPosition} autoRotateSpeed={autoRotateSpeed} />
         )}
 
         <EffectComposer enableNormalPass multisampling={4}>

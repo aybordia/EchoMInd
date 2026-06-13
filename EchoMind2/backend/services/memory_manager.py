@@ -298,4 +298,18 @@ async def get_memory_summary(user_id: str) -> dict[str, Any]:
         "summary": summary,
         "concepts_seen": concepts,
         "suggested_questions": memory.get("next_recommended_questions", []),
+        "learning_style": memory.get("learning_style", []),
+        "favorite_visual_style": memory.get("favorite_visual_style", "cinematic_with_labels"),
+        "explanation_depth": memory.get("explanation_depth", "quick_then_deeper"),
+        "presentation_preferences": memory.get("presentation_preferences", {}),
+        "interests": memory.get("interests", []),
+        "onboarding_complete": memory.get("onboarding_complete", False),
+        "feedback_count": len(memory.get("feedback_history", [])),
+        "last_feedback_rating": (
+            memory.get("feedback_history", [])[-1].get("rating")
+            if memory.get("feedback_history")
+            else None
+        ),
+        "personalization_summary": _personalization_summary(memory),
+        "backboard_enabled": _backboard_enabled(),
     }

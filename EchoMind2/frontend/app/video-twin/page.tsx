@@ -1,16 +1,17 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileVideo, RotateCcw, Sparkles, UploadCloud } from "lucide-react";
 import { AgentTimeline } from "@/components/AgentTimeline";
+import { AuthGate } from "@/components/AuthGate";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { NavBar } from "@/components/NavBar";
 import { TutorPanel } from "@/components/TutorPanel";
 import { VideoTwinCompare } from "@/components/VideoTwinCompare";
 import { resolveAssetUrl, uploadVideoTwin } from "@/lib/api";
 import { VIDEO_TWIN_STAGES } from "@/lib/constants";
-import { useEchoSession } from "@/lib/session";
+import { hasCompletedOnboarding, useEchoSession } from "@/lib/session";
 import type { VideoTwinUploadResponse } from "@/lib/types";
 
 type ViewState = "idle" | "running" | "result";
@@ -18,8 +19,19 @@ type ViewState = "idle" | "running" | "result";
 const ACCEPTED_TYPES = ".mp4,.mov,.avi,.webm,.mkv";
 
 export default function VideoTwinPage() {
+  return (
+    <div className="flex min-h-screen flex-col">
+      <NavBar />
+      <AuthGate>
+        <VideoTwinContent />
+      </AuthGate>
+    </div>
+  );
+}
+
+function VideoTwinContent() {
   const router = useRouter();
-  const { sessionId, userId } = useEchoSession();
+  const { sessionId, userId, authUserId } = useEchoSession();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [view, setView] = useState<ViewState>("idle");
@@ -31,6 +43,12 @@ export default function VideoTwinPage() {
   const [resultReady, setResultReady] = useState(false);
   const [timelineKey, setTimelineKey] = useState(0);
   const [showFeedback, setShowFeedback] = useState(false);
+
+  useEffect(() => {
+    if (authUserId && !hasCompletedOnboarding(authUserId)) {
+      router.replace("/onboarding");
+    }
+  }, [authUserId, router]);
 
   function handleFiles(files: FileList | null) {
     const next = files?.[0];
@@ -79,8 +97,7 @@ export default function VideoTwinPage() {
   const videoUrl = result ? resolveAssetUrl(result.original_video_url) : null;
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <NavBar />
+    <>
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6">
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold text-foreground sm:text-3xl">
@@ -207,7 +224,6 @@ export default function VideoTwinPage() {
           </>
         )}
       </main>
-
       {showFeedback && result && sessionId && userId && (
         <FeedbackModal
           jobId={result.job_id}
@@ -216,6 +232,6 @@ export default function VideoTwinPage() {
           onClose={() => setShowFeedback(false)}
         />
       )}
-    </div>
+    </>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Star, X } from "lucide-react";
 import { submitFeedback } from "@/lib/api";
 import { FEEDBACK_CHIPS } from "@/lib/types";
@@ -21,9 +22,16 @@ interface FeedbackModalProps {
   sessionId: string;
   userId: string;
   onClose: () => void;
+  presentationMetrics?: Record<string, unknown>;
 }
 
-export function FeedbackModal({ jobId, sessionId, userId, onClose }: FeedbackModalProps) {
+export function FeedbackModal({
+  jobId,
+  sessionId,
+  userId,
+  onClose,
+  presentationMetrics,
+}: FeedbackModalProps) {
   const [rating, setRating] = useState(0);
   const [chips, setChips] = useState<string[]>([]);
   const [freeText, setFreeText] = useState("");
@@ -45,6 +53,7 @@ export function FeedbackModal({ jobId, sessionId, userId, onClose }: FeedbackMod
         rating,
         chips,
         free_text: freeText,
+        presentation_metrics: presentationMetrics,
       });
       setAdaptation(res.next_adaptation);
     } catch {
@@ -69,13 +78,21 @@ export function FeedbackModal({ jobId, sessionId, userId, onClose }: FeedbackMod
           <div className="space-y-4 py-4 text-center">
             <p className="text-gradient-warm text-lg font-semibold">Thanks!</p>
             <p className="text-sm text-foreground-muted">{adaptation}</p>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-full bg-accent px-5 py-2 text-sm font-semibold text-background transition-opacity hover:opacity-90"
-            >
-              Done
-            </button>
+            <div className="flex flex-wrap justify-center gap-3">
+              <Link
+                href="/settings"
+                className="rounded-full bg-accent px-5 py-2 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+              >
+                Review learning settings
+              </Link>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full border border-white/10 bg-white/5 px-5 py-2 text-sm font-semibold text-foreground-muted transition-colors hover:border-white/20 hover:text-foreground"
+              >
+                Done
+              </button>
+            </div>
           </div>
         ) : (
           <>
@@ -104,30 +121,53 @@ export function FeedbackModal({ jobId, sessionId, userId, onClose }: FeedbackMod
               ))}
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              {FEEDBACK_CHIPS.map((chip) => (
-                <button
-                  key={chip}
-                  type="button"
-                  onClick={() => toggleChip(chip)}
-                  className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                    chips.includes(chip)
-                      ? "border-accent/40 bg-accent/15 text-accent-soft"
-                      : "border-white/10 bg-white/5 text-foreground-muted hover:border-white/20"
-                  }`}
-                >
-                  {CHIP_LABELS[chip] ?? chip}
-                </button>
-              ))}
-            </div>
+            {rating > 0 && rating <= 3 ? (
+              <>
+                <div className="space-y-2">
+                  <p className="text-xs font-medium uppercase tracking-wider text-accent-soft">
+                    Help EchoMind improve this experience
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {FEEDBACK_CHIPS.map((chip) => (
+                      <button
+                        key={chip}
+                        type="button"
+                        onClick={() => toggleChip(chip)}
+                        className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                          chips.includes(chip)
+                            ? "border-accent/40 bg-accent/15 text-accent-soft"
+                            : "border-white/10 bg-white/5 text-foreground-muted hover:border-white/20"
+                        }`}
+                      >
+                        {CHIP_LABELS[chip] ?? chip}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            <textarea
-              value={freeText}
-              onChange={(e) => setFreeText(e.target.value)}
-              placeholder="Anything else? (optional)"
-              rows={2}
-              className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-foreground placeholder:text-foreground-subtle focus:border-accent/30 focus:outline-none"
-            />
+                <textarea
+                  value={freeText}
+                  onChange={(e) => setFreeText(e.target.value)}
+                  placeholder="What felt off, rushed, confusing, or missing?"
+                  rows={3}
+                  className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-foreground placeholder:text-foreground-subtle focus:border-accent/30 focus:outline-none"
+                />
+              </>
+            ) : rating >= 4 ? (
+              <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-200">
+                Great — EchoMind will keep leaning into this teaching style. You can still add an optional note below.
+              </div>
+            ) : null}
+
+            {rating >= 4 ? (
+              <textarea
+                value={freeText}
+                onChange={(e) => setFreeText(e.target.value)}
+                placeholder="Optional: what worked especially well?"
+                rows={2}
+                className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-foreground placeholder:text-foreground-subtle focus:border-accent/30 focus:outline-none"
+              />
+            ) : null}
 
             <button
               type="button"

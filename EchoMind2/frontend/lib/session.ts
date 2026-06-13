@@ -1,26 +1,34 @@
 /**
- * Local session/user identity management.
- * EchoMind has no auth — a session/user id pair is created once via
- * `POST /api/session` and persisted in localStorage so adaptive memory
- * can follow the same user across visits.
+ * EchoMind session management layered on top of account auth.
+ * The signed-in user identity is the stable learner identity; the backend
+ * session id remains a lightweight per-user runtime key for simulation requests.
  */
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { createSession } from "./api";
 
-const SESSION_STORAGE_KEY = "echomind_session";
-const ONBOARDING_STORAGE_KEY = "echomind_onboarding_complete";
+const SESSION_STORAGE_PREFIX = "echomind_session";
+const ONBOARDING_STORAGE_PREFIX = "echomind_onboarding_complete";
 
 interface StoredSession {
   sessionId: string;
   userId: string;
 }
 
-function readStoredSession(): StoredSession | null {
+function sessionStorageKey(authUserId: string): string {
+  return `${SESSION_STORAGE_PREFIX}:${authUserId}`;
+}
+
+function onboardingStorageKey(authUserId: string): string {
+  return `${ONBOARDING_STORAGE_PREFIX}:${authUserId}`;
+}
+
+function readStoredSession(authUserId: string): StoredSession | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+    const raw = window.localStorage.getItem(sessionStorageKey(authUserId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<StoredSession>;
     if (typeof parsed.sessionId === "string" && typeof parsed.userId === "string") {
@@ -32,9 +40,9 @@ function readStoredSession(): StoredSession | null {
   return null;
 }
 
-function writeStoredSession(session: StoredSession): void {
+function writeStoredSession(authUserId: string, session: StoredSession): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  window.localStorage.setItem(sessionStorageKey(authUserId), JSON.stringify(session));
 }
 
 function randomId(prefix: string): string {
@@ -47,6 +55,9 @@ export interface EchoSession {
   sessionId: string | null;
   userId: string | null;
   loading: boolean;
+  authenticated: boolean;
+  authUserId: string | null;
+  authEmail: string | null;
 }
 
 interface ResolvedSession {
@@ -54,33 +65,51 @@ interface ResolvedSession {
   isNew: boolean;
 }
 
-/** Reads the stored session, or creates a fresh one (falling back to a local id if the API fails). */
-async function resolveSession(): Promise<ResolvedSession> {
-  const existing = readStoredSession();
+async function resolveSession(authUserId: string): Promise<ResolvedSession> {
+  const existing = readStoredSession(authUserId);
   if (existing) return { session: existing, isNew: false };
 
   try {
     const res = await createSession();
-    return { session: { sessionId: res.session_id, userId: res.user_id }, isNew: true };
+    return { session: { sessionId: res.session_id, userId: authUserId }, isNew: true };
   } catch {
     return {
-      session: { sessionId: randomId("session_local"), userId: randomId("user_local") },
+      session: { sessionId: randomId("session_local"), userId: authUserId },
       isNew: true,
     };
   }
 }
 
-/** Returns the persistent session/user id pair, creating one on first run. */
 export function useEchoSession(): EchoSession {
+  const { data, status } = useSession();
   const [session, setSession] = useState<StoredSession | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const authUserId = data?.user?.id ?? null;
+  const authEmail = data?.user?.email ?? null;
 
   useEffect(() => {
     let cancelled = false;
 
-    resolveSession().then(({ session: next, isNew }) => {
+    if (status === "loading") {
+      setLoading(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (status === "unauthenticated" || !authUserId) {
+      setSession(null);
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setLoading(true);
+    resolveSession(authUserId).then(({ session: next, isNew }) => {
       if (cancelled) return;
-      if (isNew) writeStoredSession(next);
+      if (isNew) writeStoredSession(authUserId, next);
       setSession(next);
       setLoading(false);
     });
@@ -88,21 +117,24 @@ export function useEchoSession(): EchoSession {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authUserId, status]);
 
   return {
     sessionId: session?.sessionId ?? null,
     userId: session?.userId ?? null,
     loading,
+    authenticated: status === "authenticated",
+    authUserId,
+    authEmail,
   };
 }
 
-export function hasCompletedOnboarding(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(ONBOARDING_STORAGE_KEY) === "true";
+export function hasCompletedOnboarding(authUserId: string | null): boolean {
+  if (typeof window === "undefined" || !authUserId) return false;
+  return window.localStorage.getItem(onboardingStorageKey(authUserId)) === "true";
 }
 
-export function markOnboardingComplete(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
+export function markOnboardingComplete(authUserId: string | null): void {
+  if (typeof window === "undefined" || !authUserId) return;
+  window.localStorage.setItem(onboardingStorageKey(authUserId), "true");
 }

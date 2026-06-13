@@ -16,10 +16,8 @@ import type {
   Voice,
 } from "./types";
 
-// Same-origin by default: requests go to /api/... on the frontend port and Next
-// rewrites them to the backend (see next.config.ts). Override with
-// NEXT_PUBLIC_BACKEND_URL only if you intentionally point at a separate origin.
-export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+export const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BACKEND_URL}${path}`, {
@@ -114,7 +112,6 @@ export async function uploadVideoTwin(
   return res.json() as Promise<VideoTwinUploadResponse>;
 }
 
-/** Resolve a backend-relative asset path (e.g. `/static/jobs/...`) to a full URL. */
 export function resolveAssetUrl(path?: string | null): string | null {
   if (!path) return null;
   return path.startsWith("http") ? path : `${BACKEND_URL}${path}`;

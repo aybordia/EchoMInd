@@ -14,6 +14,7 @@ import requests
 
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "").strip()
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM").strip()
+ELEVENLABS_MODEL_ID = os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2").strip()
 ELEVENLABS_TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 ELEVENLABS_VOICES_URL = "https://api.elevenlabs.io/v1/voices"
 
@@ -27,7 +28,6 @@ VOICE_STYLE_SETTINGS = {
     "funny": {"stability": 0.3, "similarity_boost": 0.8, "style": 0.7},
 }
 
-# Used only when ElevenLabs is unreachable, so the in-app picker still renders.
 _FALLBACK_VOICES = [
     {
         "voice_id": "browser_default",
@@ -44,12 +44,6 @@ def has_elevenlabs() -> bool:
 
 
 async def list_voices() -> list[dict]:
-    """Return the selectable voices for the student's picker.
-
-    With a key, proxies the ElevenLabs voices list (including the account's own
-    custom/cloned voices) so the key never reaches the frontend. Each entry is
-    `{voice_id, name, style_label, preview_url, category}`.
-    """
     if not ELEVENLABS_API_KEY:
         return _FALLBACK_VOICES
 
@@ -90,7 +84,6 @@ async def list_voices() -> list[dict]:
 def _synthesize_to(
     text: str, job_id: str, filename: str, voice_preference: str, voice_id: str | None
 ) -> str | None:
-    """Synthesize `text` to `static/jobs/{job_id}/{filename}`. Returns URL or None."""
     if not ELEVENLABS_API_KEY or not text.strip():
         return None
 
@@ -112,7 +105,7 @@ def _synthesize_to(
             },
             json={
                 "text": text,
-                "model_id": "eleven_turbo_v2_5",
+                "model_id": ELEVENLABS_MODEL_ID,
                 "voice_settings": voice_settings,
             },
             timeout=30,
@@ -135,25 +128,23 @@ async def synthesize_voice(
     voice_preference: str = "friendly_excited",
     voice_id: str | None = None,
 ) -> str | None:
-    """Narrate the full `text` with the chosen voice. Returns the MP3 URL or None."""
     return _synthesize_to(text, job_id, "explanation.mp3", voice_preference, voice_id)
 
 
-async def synthesize_beats(
-    beats: list[dict],
+async def synthesize_waypoint_voices(
+    waypoints: list[dict],
     job_id: str,
     voice_preference: str = "friendly_excited",
     voice_id: str | None = None,
-) -> dict[str, str]:
-    """Synthesize one audio clip per journey beat so the guided tour can pause and
-    speak each step in the chosen voice. Returns {beat_id: url}; empty if no key."""
-    if not ELEVENLABS_API_KEY:
-        return {}
-    out: dict[str, str] = {}
-    for i, beat in enumerate(beats):
-        url = _synthesize_to(
-            beat.get("text", ""), job_id, f"beat_{i}.mp3", voice_preference, voice_id
-        )
+) -> list[dict]:
+    if not waypoints:
+        return waypoints
+
+    for i, wp in enumerate(waypoints):
+        narration = wp.get("narration", "").strip()
+        if not narration:
+            continue
+        url = _synthesize_to(narration, job_id, f"waypoint_{i}.mp3", voice_preference, voice_id)
         if url:
-            out[beat.get("id", f"beat_{i}")] = url
-    return out
+            wp["audio_url"] = url
+    return waypoints

@@ -13,6 +13,7 @@ import {
 interface AskBarProps {
   onSubmit: (question: string) => void;
   loading?: boolean;
+  disabled?: boolean;
   placeholder?: string;
   initialValue?: string;
 }
@@ -25,7 +26,7 @@ function getServerSnapshotFalse() {
   return false;
 }
 
-export function AskBar({ onSubmit, loading, placeholder, initialValue = "" }: AskBarProps) {
+export function AskBar({ onSubmit, loading, disabled, placeholder, initialValue = "" }: AskBarProps) {
   const [value, setValue] = useState(initialValue);
   const [listening, setListening] = useState(false);
   const [syncedValue, setSyncedValue] = useState(initialValue);
@@ -49,7 +50,7 @@ export function AskBar({ onSubmit, loading, placeholder, initialValue = "" }: As
   }, []);
 
   function toggleListening() {
-    if (!supported || loading) return;
+    if (!supported || loading || disabled) return;
     if (listening) {
       recognitionRef.current?.stop();
       setListening(false);
@@ -72,7 +73,7 @@ export function AskBar({ onSubmit, loading, placeholder, initialValue = "" }: As
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const question = value.trim();
-    if (!question || loading) return;
+    if (!question || loading || disabled) return;
     onSubmit(question);
   }
 
@@ -84,7 +85,7 @@ export function AskBar({ onSubmit, loading, placeholder, initialValue = "" }: As
       <button
         type="button"
         onClick={toggleListening}
-        disabled={!supported || loading}
+        disabled={!supported || loading || disabled}
         title={supported ? "Ask with your voice" : "Voice input isn't supported in this browser"}
         className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-colors disabled:opacity-40 ${
           listening
@@ -101,12 +102,12 @@ export function AskBar({ onSubmit, loading, placeholder, initialValue = "" }: As
         onChange={(e) => setValue(e.target.value)}
         placeholder={placeholder ?? 'Ask EchoMind anything… "What if I jumped on every planet?"'}
         className="flex-1 bg-transparent text-sm text-foreground placeholder:text-foreground-subtle focus:outline-none sm:text-base"
-        disabled={loading}
+        disabled={loading || disabled}
       />
 
       <button
         type="submit"
-        disabled={loading || !value.trim()}
+        disabled={loading || disabled || !value.trim()}
         className="flex h-11 items-center gap-2 rounded-full bg-accent px-4 text-sm font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-40 sm:px-5"
       >
         <Send className="h-4 w-4" />

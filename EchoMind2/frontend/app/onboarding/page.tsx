@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
+import { AuthGate } from "@/components/AuthGate";
 import { NavBar } from "@/components/NavBar";
 import { VoicePicker } from "@/components/VoicePicker";
 import { submitOnboarding } from "@/lib/api";
@@ -105,8 +106,19 @@ function toggleValue(list: string[], value: string): string[] {
 }
 
 export default function OnboardingPage() {
+  return (
+    <div className="flex min-h-screen flex-col">
+      <NavBar />
+      <AuthGate>
+        <OnboardingContent />
+      </AuthGate>
+    </div>
+  );
+}
+
+function OnboardingContent() {
   const router = useRouter();
-  const { sessionId, userId } = useEchoSession();
+  const { sessionId, userId, authUserId } = useEchoSession();
 
   const [step, setStep] = useState(0);
   const [studentLevel, setStudentLevel] = useState("middle_school");
@@ -138,7 +150,7 @@ export default function OnboardingPage() {
         voice_id: voiceId,
         voice_label: voiceLabel,
       });
-      markOnboardingComplete();
+      markOnboardingComplete(authUserId);
       router.push("/ask");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
@@ -159,8 +171,6 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <NavBar />
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-4 py-10 sm:px-6">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -327,6 +337,5 @@ export default function OnboardingPage() {
           </button>
         </div>
       </main>
-    </div>
   );
 }
