@@ -1,6 +1,6 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   OrbitControls,
   Stars,
@@ -17,9 +17,25 @@ import {
   N8AO,
   ToneMapping,
 } from "@react-three/postprocessing";
+import { easing } from "maath";
 import { ToneMappingMode } from "postprocessing";
-import { ACESFilmicToneMapping } from "three";
+import { ACESFilmicToneMapping, type Vector3 } from "three";
 import { Suspense, type ReactNode } from "react";
+
+interface OrbitLike {
+  target: Vector3;
+  autoRotate: boolean;
+  autoRotateSpeed: number;
+  update: () => void;
+}
+
+/** A scripted camera move: where to look, and where the camera should sit. */
+export interface CameraFocus {
+  /** World point to look at. */
+  lookAt: [number, number, number];
+  /** World position for the camera. */
+  position: [number, number, number];
+}
 
 interface SceneStageProps {
   children: ReactNode;
@@ -35,6 +51,43 @@ interface SceneStageProps {
   groundShadow?: boolean;
   /** Tint of the key light. */
   keyColor?: string;
+  /**
+   * When provided, the camera is "directed": it eases to this framing and
+   * auto-rotation pauses. Pass `null` to return to a wide, auto-rotating
+   * overview. Omit entirely to keep the default free-orbit behavior.
+   */
+  cameraFocus?: CameraFocus | null;
+}
+
+/** Eases the camera + orbit target toward a scripted focus, or back to a wide
+ *  auto-rotating overview when focus is null. Drives the journey's cinematics. */
+function CameraDirector({
+  focus,
+  overview,
+  autoRotateSpeed,
+}: {
+  focus?: CameraFocus | null;
+  overview: [number, number, number];
+  autoRotateSpeed: number;
+}) {
+  const controls = useThree((s) => s.controls) as OrbitLike | null;
+  const camera = useThree((s) => s.camera);
+
+  useFrame((_, dt) => {
+    if (!controls) return;
+    if (focus) {
+      controls.autoRotate = false;
+      easing.damp3(camera.position, focus.position, 0.55, dt);
+      easing.damp3(controls.target, focus.lookAt, 0.55, dt);
+    } else {
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = autoRotateSpeed;
+      easing.damp3(camera.position, overview, 0.9, dt);
+      easing.damp3(controls.target, [0, 0.8, 0], 0.9, dt);
+    }
+    controls.update();
+  });
+  return null;
 }
 
 /**
@@ -55,7 +108,9 @@ export function SceneStage({
   starfield = true,
   groundShadow = true,
   keyColor = "#fff3e0",
+  cameraFocus,
 }: SceneStageProps) {
+  const directed = cameraFocus !== undefined;
   return (
     <Canvas
       shadows
@@ -111,6 +166,7 @@ export function SceneStage({
         )}
 
         <OrbitControls
+          makeDefault
           enablePan={false}
           enableZoom={enableZoom}
           autoRotate
@@ -119,6 +175,14 @@ export function SceneStage({
           maxDistance={maxDistance}
           maxPolarAngle={Math.PI / 1.7}
         />
+
+        {directed && (
+          <CameraDirector
+            focus={cameraFocus}
+            overview={cameraPosition}
+            autoRotateSpeed={autoRotateSpeed}
+          />
+        )}
 
         <EffectComposer enableNormalPass multisampling={4}>
           <N8AO aoRadius={0.9} intensity={1.6} distanceFalloff={1} color="#04050a" />

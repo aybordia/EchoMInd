@@ -100,6 +100,21 @@ export function PlanetJumpViewer({
   const startX = -((n - 1) * SPACING) / 2;
   const mid = (n - 1) / 2;
 
+  // Map the active narration focus to a camera move: push in on the named
+  // planet, or pull back to a wide comparison shot on "overview".
+  const focusIndex = payload.planets.findIndex((p) => p.name === activeFocus);
+  const cameraFocus =
+    focusIndex >= 0
+      ? (() => {
+          const z = -Math.pow((focusIndex - mid) / mid, 2) * 1.6;
+          const px = startX + focusIndex * SPACING;
+          return {
+            lookAt: [px, PLANET_R + 0.4, z] as [number, number, number],
+            position: [px + 0.6, PLANET_R + 2.2, z + 6.2] as [number, number, number],
+          };
+        })()
+      : null;
+
   return (
     <div className="relative h-full w-full overflow-hidden rounded-3xl">
       <SceneStage
@@ -108,6 +123,7 @@ export function PlanetJumpViewer({
         maxDistance={34}
         minDistance={7}
         autoRotateSpeed={0.16}
+        cameraFocus={cameraFocus}
       >
         {payload.planets.map((planet, i) => {
           // gentle arc: planets near the center sit slightly forward

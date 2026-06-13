@@ -103,9 +103,18 @@ Run locally (open network) so APIs are live. Mark each ✅/❌ and fix ❌ befor
 
 ## 3. REMAINING WORK (priority order)
 
-### 3.1 Real camera choreography for the journey  ★ highest impact
-Today the journey changes emphasis but the camera just auto-orbits. Implement a
-`CameraDirector` (per `07_CINEMATIC_RENDER_ENGINE.md` §7) inside `SceneStage`:
+> DONE since handoff: **3.1 camera choreography** (CameraDirector in `SceneStage`,
+> driven by PlanetJumpViewer's `cameraFocus`) and **3.2 onboarding voice picker**
+> (VoicePicker added to onboarding step 4, persists `voice_id`/`voice_label`). Both
+> validated: build passes, headless journey advanced 3/6 with the camera moving and
+> zero console errors. Single-origin proxy (`next.config.ts`) also landed so the app
+> runs behind one port. Remaining items below.
+
+### 3.1 Real camera choreography for the journey  — ✅ DONE (extend to other viewers)
+Implemented for planet jump. To finish: give `MoleculeViewer` / `MoonDropViewer` /
+`RampBoxViewer` their own `cameraFocus` mapping so their journeys move the camera too
+(currently only PlanetJumpViewer passes `cameraFocus` to `SceneStage`). Reference
+`07_CINEMATIC_RENDER_ENGINE.md` §7:
 - Accept an optional `focusTarget` (world position or object id) + a `shot` hint.
 - In `useFrame`, ease `camera.position`/`lookAt` toward the focused element using
   `maath/easing.damp3` (already installed). Disable `autoRotate` while a focus is
@@ -114,11 +123,10 @@ Today the journey changes emphasis but the camera just auto-orbits. Implement a
 - Wire: `CinematicJourney` already emits `focus`; pass it down to `SceneStage` and
   map focus→target position per viewer.
 
-### 3.2 Voice picker in onboarding + persist to backend
-- Add `<VoicePicker>` to `app/onboarding/page.tsx`; include `voice_id` + `voice_label`
-  in the `submitOnboarding` payload (types already support it; backend already stores it).
-- Confirm `/ask` reads the persisted voice on load (localStorage keys
-  `echomind_voice_id` / `echomind_voice_label`).
+### 3.2 Voice picker in onboarding + persist to backend  — ✅ DONE
+VoicePicker added to onboarding step 4; `voice_id`/`voice_label` sent in
+`submitOnboarding` and stored in memory. (Already confirmed `/ask` restores the
+persisted voice via localStorage `echomind_voice_id` / `echomind_voice_label`.)
 
 ### 3.3 Extend `activeFocus` spotlight to the other viewers
 - `MoleculeViewer`: focus `charges` → highlight partial-charge labels/atoms; focus
