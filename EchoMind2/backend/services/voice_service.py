@@ -39,6 +39,21 @@ _FALLBACK_VOICES = [
 ]
 
 
+def _configured_voice_or_fallback() -> list[dict]:
+    if ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID and ELEVENLABS_VOICE_ID != "browser_default":
+        return [
+            {
+                "voice_id": ELEVENLABS_VOICE_ID,
+                "name": "Configured ElevenLabs Voice",
+                "style_label": "default project voice",
+                "preview_url": None,
+                "category": "configured",
+            },
+            *_FALLBACK_VOICES,
+        ]
+    return _FALLBACK_VOICES
+
+
 def has_elevenlabs() -> bool:
     return bool(ELEVENLABS_API_KEY)
 
@@ -54,7 +69,7 @@ async def list_voices() -> list[dict]:
             timeout=15,
         )
         if not resp.ok:
-            return _FALLBACK_VOICES
+            return _configured_voice_or_fallback()
         data = resp.json()
         voices: list[dict] = []
         for v in data.get("voices", []):
@@ -76,9 +91,9 @@ async def list_voices() -> list[dict]:
                     "category": v.get("category", "premade"),
                 }
             )
-        return voices or _FALLBACK_VOICES
+        return voices or _configured_voice_or_fallback()
     except (requests.RequestException, ValueError):
-        return _FALLBACK_VOICES
+        return _configured_voice_or_fallback()
 
 
 def _synthesize_to(

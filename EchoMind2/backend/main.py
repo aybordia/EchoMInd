@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
-from routers import agent_router, memory_router, video_twin_router  # noqa: E402
+from routers import agent_router, game_router, memory_router  # noqa: E402
 from models.schemas import SessionResponse  # noqa: E402
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -39,8 +39,8 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 app.include_router(agent_router.router, prefix="/api", tags=["agent"])
+app.include_router(game_router.router, prefix="/api", tags=["game"])
 app.include_router(memory_router.router, prefix="/api", tags=["memory"])
-app.include_router(video_twin_router.router, prefix="/api", tags=["video-twin"])
 
 
 @app.get("/health")

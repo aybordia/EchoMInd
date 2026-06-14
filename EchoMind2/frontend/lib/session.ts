@@ -6,8 +6,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import { createSession } from "./api";
+import { getAuthUserId, useAuthSession } from "./auth-client";
 
 const SESSION_STORAGE_PREFIX = "echomind_session";
 const ONBOARDING_STORAGE_PREFIX = "echomind_onboarding_complete";
@@ -69,23 +69,30 @@ async function resolveSession(authUserId: string): Promise<ResolvedSession> {
   const existing = readStoredSession(authUserId);
   if (existing) return { session: existing, isNew: false };
 
+  const fallback: StoredSession = {
+    sessionId: randomId("session_local"),
+    userId: authUserId,
+  };
+
   try {
-    const res = await createSession();
+    const res = await Promise.race([
+      createSession(),
+      new Promise<never>((_, reject) => {
+        window.setTimeout(() => reject(new Error("Session creation timed out")), 1500);
+      }),
+    ]);
     return { session: { sessionId: res.session_id, userId: authUserId }, isNew: true };
   } catch {
-    return {
-      session: { sessionId: randomId("session_local"), userId: authUserId },
-      isNew: true,
-    };
+    return { session: fallback, isNew: true };
   }
 }
 
 export function useEchoSession(): EchoSession {
-  const { data, status } = useSession();
+  const { data, status } = useAuthSession();
   const [session, setSession] = useState<StoredSession | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const authUserId = data?.user?.id ?? null;
+  const authUserId = getAuthUserId(data);
   const authEmail = data?.user?.email ?? null;
 
   useEffect(() => {

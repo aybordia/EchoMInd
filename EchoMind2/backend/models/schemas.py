@@ -71,6 +71,40 @@ class FollowupRequest(BaseModel):
     voice_id: Optional[str] = None
 
 
+class ConversationTurnRequest(BaseModel):
+    job_id: str
+    session_id: str
+    user_id: str
+    role: str
+    text: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class XPEvent(BaseModel):
+    type: str
+    amount: int
+    job_id: Optional[str] = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class PredictionSubmitRequest(BaseModel):
+    job_id: str
+    session_id: str
+    user_id: str
+    selected_answer: str
+
+
+class GameState(BaseModel):
+    user_id: str
+    xp_total: int = 0
+    level: int = 1
+    concept_mastery: dict[str, Any] = Field(default_factory=dict)
+    badges: list[dict[str, Any]] = Field(default_factory=list)
+    unlocked_tools: list[str] = Field(default_factory=list)
+    prediction_stats: dict[str, Any] = Field(default_factory=dict)
+    xp_events: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class Scenario(BaseModel):
     scenario_id: str
     title: str
@@ -114,12 +148,3 @@ class AgentResult(BaseModel):
     scenario: dict[str, Any]
     simulation: dict[str, Any]
     teaching: dict[str, Any]
-
-
-class VideoTwinUploadResponse(BaseModel):
-    job_id: str
-    status: str
-    message: str
-    original_video_url: Optional[str] = None
-    digital_twin_payload: Optional[dict[str, Any]] = None
-    teaching: Optional[dict[str, Any]] = None

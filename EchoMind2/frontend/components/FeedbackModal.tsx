@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Star, X } from "lucide-react";
+import { Star, Trophy, X } from "lucide-react";
 import { submitFeedback } from "@/lib/api";
 import { FEEDBACK_CHIPS } from "@/lib/types";
 
@@ -37,6 +37,7 @@ export function FeedbackModal({
   const [freeText, setFreeText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [adaptation, setAdaptation] = useState<string | null>(null);
+  const [rewardSummary, setRewardSummary] = useState<string | null>(null);
 
   function toggleChip(chip: string) {
     setChips((prev) => (prev.includes(chip) ? prev.filter((c) => c !== chip) : [...prev, chip]));
@@ -56,6 +57,9 @@ export function FeedbackModal({
         presentation_metrics: presentationMetrics,
       });
       setAdaptation(res.next_adaptation);
+      if (res.game_state) {
+        setRewardSummary(`Level ${res.game_state.level} · ${res.game_state.xp_total} XP`);
+      }
     } catch {
       setAdaptation("Thanks for the feedback!");
     } finally {
@@ -78,10 +82,22 @@ export function FeedbackModal({
           <div className="space-y-4 py-4 text-center">
             <p className="text-gradient-warm text-lg font-semibold">Thanks!</p>
             <p className="text-sm text-foreground-muted">{adaptation}</p>
+            {rewardSummary ? (
+              <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-accent/20 bg-accent/8 px-4 py-2 text-sm font-semibold text-accent-soft">
+                <Trophy className="h-4 w-4" />
+                {rewardSummary}
+              </div>
+            ) : null}
             <div className="flex flex-wrap justify-center gap-3">
               <Link
-                href="/settings"
+                href="/progress"
                 className="rounded-full bg-accent px-5 py-2 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+              >
+                View progress
+              </Link>
+              <Link
+                href="/settings"
+                className="rounded-full border border-white/10 bg-white/5 px-5 py-2 text-sm font-semibold text-foreground-muted transition-colors hover:border-white/20 hover:text-foreground"
               >
                 Review learning settings
               </Link>

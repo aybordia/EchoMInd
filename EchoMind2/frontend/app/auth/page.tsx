@@ -3,9 +3,10 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signIn, useSession } from "next-auth/react";
+import { signIn } from "next-auth/react";
 import { Loader2, LockKeyhole, Mail, Sparkles } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
+import { useAuthSession } from "@/lib/auth-client";
 import { hasCompletedOnboarding, useEchoSession } from "@/lib/session";
 
 type Mode = "signin" | "signup";
@@ -32,7 +33,7 @@ function AuthPageShell() {
 function AuthPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data } = useSession();
+  const { data } = useAuthSession();
   const { authUserId } = useEchoSession();
   const [mode, setMode] = useState<Mode>("signup");
   const [email, setEmail] = useState("");

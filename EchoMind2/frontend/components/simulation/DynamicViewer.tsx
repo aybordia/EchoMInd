@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Html, Line } from "@react-three/drei";
 import type { Group, Mesh } from "three";
@@ -935,6 +935,7 @@ interface DynamicViewerProps {
 
 export function DynamicViewer({ payload, journeyActive, currentWaypoint, simulationPaused, simulationTime = 0 }: DynamicViewerProps) {
   /* eslint-disable @typescript-eslint/no-explicit-any */
+  const [manualCamera, setManualCamera] = useState(false);
   const simType = (payload as any).sim_type || "energy_comparison";
   const computed = (payload as any).computed || {};
   const equation = (payload as any).equation;
@@ -953,6 +954,10 @@ export function DynamicViewer({ payload, journeyActive, currentWaypoint, simulat
     return b;
   }, [payload.takeaway]);
 
+  useEffect(() => {
+    setManualCamera(false);
+  }, [payload]);
+
   return (
     <div className="relative h-full w-full overflow-hidden rounded-3xl">
       <SceneStage
@@ -960,8 +965,8 @@ export function DynamicViewer({ payload, journeyActive, currentWaypoint, simulat
         fov={50}
         maxDistance={35}
         minDistance={4}
-        autoRotateSpeed={journeyActive ? 0 : 0.12}
-        disableOrbitControls={!!journeyActive}
+        autoRotateSpeed={journeyActive || manualCamera ? 0 : 0.12}
+        onCameraInteraction={() => setManualCamera(true)}
       >
         <SceneComponent computed={computed} simulationTime={simulationTime} timelineDuration={timelineDuration} />
         {simulationPaused !== undefined && <ClockController paused={!!simulationPaused} />}
@@ -969,7 +974,7 @@ export function DynamicViewer({ payload, journeyActive, currentWaypoint, simulat
           <JourneyCamera
             targetPosition={currentWaypoint.cameraPos}
             targetLookAt={currentWaypoint.cameraTarget}
-            active={true}
+            active={!manualCamera}
           />
         )}
       </SceneStage>

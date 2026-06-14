@@ -17,13 +17,3 @@ export const SAMPLE_PROMPTS = [
   "What happens when sodium meets chlorine?",
   "What if Earth stopped spinning?",
 ];
-
-/** Playback stages for the video-twin upload pipeline (no `stages` field in that response). */
-export const VIDEO_TWIN_STAGES = [
-  "Uploading your video...",
-  "Tracking motion frame by frame...",
-  "Estimating ramp angle and friction...",
-  "Building the digital twin...",
-  "Rendering the explanation...",
-  "Done.",
-];

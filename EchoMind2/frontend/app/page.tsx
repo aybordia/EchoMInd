@@ -1,59 +1,177 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
-import { Film, Mic, Orbit, Rocket, Sparkles, Wand2 } from "lucide-react";
+import {
+  BarChart3,
+  Brain,
+  CheckCircle2,
+  Compass,
+  LineChart,
+  MessageSquare,
+  Rocket,
+  Sparkles,
+  Target,
+  Trophy,
+} from "lucide-react";
 import { AuthAction } from "@/components/AuthAction";
 import { AskBar } from "@/components/AskBar";
-import { LandingHeroScene } from "@/components/LandingHeroScene";
+import { ConceptMap } from "@/components/ConceptMap";
 import { NavBar } from "@/components/NavBar";
+import { XPHeader } from "@/components/XPHeader";
+import { getGameState, getMemory } from "@/lib/api";
+import { getAuthUserId, useAuthSession } from "@/lib/auth-client";
 import { SAMPLE_PROMPTS } from "@/lib/constants";
 import { hasCompletedOnboarding, useEchoSession } from "@/lib/session";
+import type { GameState, MemorySummary, XPEvent } from "@/lib/types";
 
-const FEATURES = [
-  {
-    icon: Orbit,
-    title: "Live 3D simulations",
-    description:
-      "Every answer renders as an interactive Three.js scene with lighting, camera motion, and teachable labels.",
-  },
-  {
-    icon: Mic,
-    title: "Voice-first tutoring",
-    description:
-      "Ask with your voice, hear the explanation back, and keep the lesson conversational after the simulation ends.",
-  },
-  {
-    icon: Wand2,
-    title: "Adaptive learning memory",
-    description:
-      "EchoMind remembers pace, visuals, and depth preferences so the next explanation fits the way you learn.",
-  },
-  {
-    icon: Film,
-    title: "Real-world digital twins",
-    description:
-      "Upload a clip from real life and EchoMind reconstructs it into a physics-aware 3D lesson.",
-  },
-];
+function nextLevelTarget(level: number): number {
+  return level * level * 100;
+}
 
-const STEPS = [
-  { step: "01", title: "Create your account", description: "Use email and password so your learning profile stays with you." },
-  { step: "02", title: "Ask or upload", description: "Pose a WhatIf question or bring in a real-world video." },
-  { step: "03", title: "Watch the simulation", description: "EchoMind renders a clean cinematic walkthrough." },
-  { step: "04", title: "Teach EchoMind back", description: "Rate the lesson so future explanations get smarter." },
-];
+function formatDate(value?: string) {
+  if (!value) return "Recent";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Recent";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
-export default function LandingPage() {
+function buildXpSeries(events: XPEvent[]) {
+  const recent = events.slice(-9);
+  let total = 0;
+  return recent.map((event, index) => {
+    total += Number(event.amount ?? 0);
+    return {
+      label: event.type.replaceAll("_", " "),
+      value: total,
+      amount: Number(event.amount ?? 0),
+      index,
+    };
+  });
+}
+
+function EmptyGraph() {
+  return (
+    <div className="flex h-44 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.03] text-center text-sm text-foreground-muted">
+      Run a simulation to start building your learning graph.
+    </div>
+  );
+}
+
+function XpTrend({ events }: { events: XPEvent[] }) {
+  const series = buildXpSeries(events);
+  if (!series.length) return <EmptyGraph />;
+  const max = Math.max(...series.map((point) => point.value), 1);
+
+  return (
+    <div className="h-44 rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
+      <div className="flex h-full items-end gap-2">
+        {series.map((point) => (
+          <div key={`${point.label}-${point.index}`} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+            <div
+              className="w-full rounded-t-xl bg-gradient-to-t from-accent to-accent-cool shadow-[0_0_20px_rgba(255,157,77,0.18)]"
+              style={{ height: `${Math.max(12, (point.value / max) * 132)}px` }}
+              title={`${point.label}: +${point.amount} XP`}
+            />
+            <div className="max-w-full truncate text-[10px] capitalize text-foreground-subtle">
+              {point.label}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MasteryBars({ state }: { state: GameState | null }) {
+  const rows = Object.entries(state?.concept_mastery ?? {})
+    .sort(([, a], [, b]) => b.progress - a.progress)
+    .slice(0, 5);
+
+  if (!rows.length) {
+    return (
+      <div className="space-y-3">
+        {["Energy", "Gravity", "Scientific Prediction"].map((concept, index) => (
+          <div key={concept}>
+            <div className="mb-2 flex justify-between text-sm">
+              <span className="font-medium text-foreground">{concept}</span>
+              <span className="text-foreground-subtle">0%</span>
+            </div>
+            <div className="h-2 rounded-full bg-white/10">
+              <div className="h-2 rounded-full bg-white/10" style={{ width: `${8 + index * 4}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {rows.map(([concept, node]) => (
+        <div key={concept}>
+          <div className="mb-2 flex justify-between gap-3 text-sm">
+            <span className="min-w-0 truncate font-medium text-foreground">{concept}</span>
+            <span className="text-accent-soft">{node.progress}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-white/10">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-accent-cool via-accent to-accent-violet"
+              style={{ width: `${node.progress}%` }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DashboardPage() {
   const router = useRouter();
-  const { data } = useSession();
+  const { data, status } = useAuthSession();
   const { authUserId } = useEchoSession();
+  const userId = getAuthUserId(data);
   const [loading, setLoading] = useState(false);
+  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [memory, setMemory] = useState<MemorySummary | null>(null);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    Promise.all([getGameState(userId), getMemory(userId)])
+      .then(([nextGame, nextMemory]) => {
+        if (!cancelled) {
+          setGameState(nextGame);
+          setMemory(nextMemory);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const attempts = Number(gameState?.prediction_stats?.attempts ?? 0);
+  const correct = Number(gameState?.prediction_stats?.correct ?? 0);
+  const accuracy = attempts ? Math.round((correct / attempts) * 100) : 0;
+  const xpTotal = gameState?.xp_total ?? 0;
+  const level = gameState?.level ?? 1;
+  const target = nextLevelTarget(level);
+  const previous = Math.max(0, (level - 1) * (level - 1) * 100);
+  const levelProgress = Math.min(100, Math.round(((xpTotal - previous) / Math.max(1, target - previous)) * 100));
+  const recentScenarios = useMemo(() => (memory?.recent_scenarios ?? []).slice(-5).reverse(), [memory]);
+  const recentTurns = useMemo(
+    () => (memory?.conversation_history ?? []).filter((turn) => turn.role === "user").slice(-4).reverse(),
+    [memory],
+  );
+  const suggested = memory?.suggested_questions?.length ? memory.suggested_questions : SAMPLE_PROMPTS;
 
   function handleAsk(question: string) {
-    if (!data?.user) return;
+    if (!data?.user) {
+      router.push(`/auth?callbackUrl=${encodeURIComponent("/onboarding")}`);
+      return;
+    }
     setLoading(true);
     const target = hasCompletedOnboarding(authUserId) ? "/ask" : "/onboarding";
     router.push(`${target}?q=${encodeURIComponent(question)}`);
@@ -62,166 +180,175 @@ export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <NavBar />
-      <main className="flex-1">
-        <section className="relative overflow-hidden px-4 pb-20 pt-16 sm:px-6 sm:pb-28 sm:pt-24">
-          <div className="bg-grid-faint absolute inset-0 opacity-40" />
-          <div className="animate-float-slow absolute -top-24 left-1/4 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
-          <div className="animate-float-slower absolute right-0 top-1/3 h-80 w-80 rounded-full bg-accent-cool/10 blur-3xl" />
-          <div className="animate-float-slow absolute bottom-0 left-0 h-64 w-64 rounded-full bg-accent-violet/10 blur-3xl" />
-
-          <div className="relative mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-[1.06fr_0.94fr]">
-            <div className="space-y-8 text-center lg:text-left">
-              <span className="animate-fade-in-up inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-medium text-foreground-muted">
-                <Sparkles className="h-3.5 w-3.5 text-accent-soft" />
-                Personalized AI tutor with live simulations
-              </span>
-
-              <div className="space-y-4">
-                <h1 className="animate-fade-in-up text-4xl font-semibold leading-tight tracking-tight text-foreground sm:text-6xl">
-                  Ask anything.
-                  <br />
-                  <span className="text-gradient-warm">See science happen.</span>
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:py-8">
+        <section className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="glass-panel-strong glow-warm p-5 sm:p-7">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-accent-soft">
+                  <Sparkles className="h-4 w-4" />
+                  Learning Dashboard
+                </div>
+                <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-5xl">
+                  Your science progress, all in one place.
                 </h1>
-
-                <p className="animate-fade-in-up max-w-xl text-base text-foreground-muted sm:text-lg lg:max-w-2xl">
-                  EchoMind turns your questions into cinematic simulations, voice-guided explanations, and a learning profile that gets smarter every session.
-                </p>
               </div>
-
-              {data?.user ? (
-                <>
-                  <div className="animate-fade-in-up max-w-xl lg:max-w-2xl">
-                    <AskBar onSubmit={handleAsk} loading={loading} />
-                  </div>
-                  <div className="animate-fade-in-up flex flex-wrap items-center justify-center gap-2 lg:justify-start">
-                    {SAMPLE_PROMPTS.map((prompt) => (
-                      <button
-                        key={prompt}
-                        type="button"
-                        onClick={() => handleAsk(prompt)}
-                        className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-foreground-muted transition-colors hover:border-accent/30 hover:text-foreground"
-                      >
-                        {prompt}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="animate-fade-in-up flex flex-wrap items-center justify-center gap-3 lg:justify-start">
-                    <Link
-                      href={hasCompletedOnboarding(authUserId) ? "/ask" : "/onboarding"}
-                      className="inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-sm font-semibold text-background transition-opacity hover:opacity-90"
-                    >
-                      <Rocket className="h-4 w-4" />
-                      Enter EchoMind
-                    </Link>
-                    <Link
-                      href="/settings"
-                      className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm text-foreground-muted transition-colors hover:border-white/20 hover:text-foreground"
-                    >
-                      <Wand2 className="h-4 w-4" />
-                      Personal Learning Settings
-                    </Link>
-                  </div>
-                </>
-              ) : (
-                <div className="animate-fade-in-up max-w-xl space-y-4 lg:max-w-2xl">
-                  <div className="glass-panel-strong space-y-4 p-5 text-left">
-                    <div className="text-sm font-medium text-foreground">Start with simple sign-in</div>
-                    <p className="text-sm text-foreground-muted">
-                      EchoMind uses your account to save onboarding, ratings, and learning style so the tutor keeps getting better for you.
-                    </p>
-                    <div className="flex flex-wrap gap-3">
-                      <AuthAction callbackUrl="/onboarding" variant="primary" />
-                      <Link
-                        href="/video-twin"
-                        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm text-foreground-muted transition-colors hover:border-white/20 hover:text-foreground"
-                      >
-                        <Film className="h-4 w-4" />
-                        Preview a video twin
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {userId ? <XPHeader userId={userId} initialState={gameState} /> : null}
             </div>
-
-            <div className="animate-fade-in-up">
-              <LandingHeroScene />
+            <p className="max-w-3xl text-sm leading-6 text-foreground-muted sm:text-base">
+              Ask a question, watch the 3D simulation, then see how your concepts, predictions, feedback, and chat history build into a clearer learning profile.
+            </p>
+            <div className="mt-6">
+              <AskBar onSubmit={handleAsk} loading={loading || status === "loading"} />
             </div>
-          </div>
-        </section>
-
-        <section className="px-4 py-16 sm:px-6">
-          <div className="mx-auto max-w-5xl space-y-10">
-            <div className="space-y-2 text-center">
-              <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">How the flow works</h2>
-              <p className="text-sm text-foreground-muted">
-                A clean entry, a clean lesson, and memory that improves the next one.
-              </p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {STEPS.map((s) => (
-                <div key={s.step} className="glass-panel space-y-2 p-5">
-                  <div className="font-mono text-xs text-accent-soft">{s.step}</div>
-                  <div className="font-semibold text-foreground">{s.title}</div>
-                  <p className="text-sm text-foreground-muted">{s.description}</p>
-                </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {suggested.slice(0, 4).map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => handleAsk(prompt)}
+                  className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-foreground-muted transition-colors hover:border-accent/30 hover:text-foreground sm:text-sm"
+                >
+                  {prompt}
+                </button>
               ))}
             </div>
           </div>
-        </section>
 
-        <section className="px-4 py-16 sm:px-6">
-          <div className="mx-auto max-w-5xl space-y-10">
-            <div className="space-y-2 text-center">
-              <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">
-                Built for <span className="text-gradient-cool">curious minds</span>
-              </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="glass-panel p-5">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <Target className="h-4 w-4 text-accent-soft" />
+                  Next Level
+                </div>
+                <span className="text-xs text-foreground-subtle">Level {level}</span>
+              </div>
+              <div className="text-4xl font-semibold text-foreground">{levelProgress}%</div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+                <div className="h-full rounded-full bg-accent" style={{ width: `${levelProgress}%` }} />
+              </div>
+              <p className="mt-3 text-sm text-foreground-muted">{xpTotal} XP earned so far</p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {FEATURES.map((feature) => {
-                const Icon = feature.icon;
-                return (
-                  <div key={feature.title} className="glass-panel-strong flex gap-4 p-5">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-accent-soft">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="font-semibold text-foreground">{feature.title}</div>
-                      <p className="text-sm text-foreground-muted">{feature.description}</p>
-                    </div>
-                  </div>
-                );
-              })}
+
+            <div className="glass-panel p-5">
+              <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
+                <CheckCircle2 className="h-4 w-4 text-accent-soft" />
+                Prediction Accuracy
+              </div>
+              <div className="text-4xl font-semibold text-foreground">{accuracy}%</div>
+              <p className="mt-2 text-sm text-foreground-muted">{correct}/{attempts} predictions correct</p>
             </div>
           </div>
         </section>
 
-        <section className="px-4 py-16 sm:px-6">
-          <div className="glass-panel-strong glow-warm mx-auto max-w-3xl space-y-4 p-8 text-center">
-            <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">
-              Ready to <span className="text-gradient-warm">make curiosity visible</span>?
-            </h2>
-            <p className="text-sm text-foreground-muted">
-              Sign in with email and password to unlock your personalized learning profile and keep your sessions connected.
-            </p>
-            {data?.user ? (
-              <Link
-                href={hasCompletedOnboarding(authUserId) ? "/ask" : "/onboarding"}
-                className="inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-sm font-semibold text-background transition-opacity hover:opacity-90"
-              >
-                <Rocket className="h-4 w-4" />
-                Continue into EchoMind
+        {!userId ? (
+          <section className="glass-panel flex flex-wrap items-center justify-between gap-4 p-5">
+            <div>
+              <h2 className="text-xl font-semibold text-foreground">Sign in to save this dashboard</h2>
+              <p className="mt-1 text-sm text-foreground-muted">
+                Your chats, ratings, predictions, and concept mastery stay connected to your learning profile.
+              </p>
+            </div>
+            <AuthAction callbackUrl="/onboarding" variant="primary" />
+          </section>
+        ) : null}
+
+        <section className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className="glass-panel-strong p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <LineChart className="h-5 w-5 text-accent-soft" />
+              <h2 className="text-xl font-semibold text-foreground">XP Growth</h2>
+            </div>
+            <XpTrend events={gameState?.xp_events ?? []} />
+          </div>
+
+          <div className="glass-panel-strong p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <Brain className="h-5 w-5 text-accent-soft" />
+              <h2 className="text-xl font-semibold text-foreground">Strongest Concepts</h2>
+            </div>
+            <MasteryBars state={gameState} />
+          </div>
+        </section>
+
+        <section className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
+          <div className="glass-panel-strong p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-accent-soft" />
+                <h2 className="text-xl font-semibold text-foreground">Previous Chats</h2>
+              </div>
+              <Link href="/ask" className="text-sm font-medium text-accent-soft hover:text-accent">
+                Open tutor
               </Link>
-            ) : (
-              <AuthAction callbackUrl="/onboarding" variant="primary" />
-            )}
+            </div>
+            <div className="space-y-3">
+              {recentScenarios.length ? recentScenarios.map((item) => (
+                <div key={`${item.scenario_id}-${item.date}`} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-foreground">{item.title || "Simulation"}</div>
+                      <p className="mt-1 line-clamp-2 text-sm text-foreground-muted">
+                        {item.key_takeaway || "Simulation saved to your learning history."}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs text-foreground-subtle">{formatDate(item.date)}</span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(item.concepts ?? []).slice(0, 4).map((concept) => (
+                      <span key={concept} className="rounded-full bg-white/[0.08] px-2.5 py-1 text-xs text-foreground-muted">
+                        {concept}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )) : recentTurns.length ? recentTurns.map((turn) => (
+                <div key={`${turn.job_id}-${turn.date}`} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <p className="line-clamp-2 text-sm text-foreground">{turn.text}</p>
+                    <span className="shrink-0 text-xs text-foreground-subtle">{formatDate(turn.date)}</span>
+                  </div>
+                </div>
+              )) : (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-5 text-sm text-foreground-muted">
+                  Your recent simulations will appear here after the first lesson.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <div className="glass-panel-strong p-5">
+              <div className="mb-4 flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-accent-soft" />
+                <h2 className="text-xl font-semibold text-foreground">Concept Map</h2>
+              </div>
+              <ConceptMap mastery={gameState?.concept_mastery ?? {}} />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="glass-panel p-4">
+                <Trophy className="mb-3 h-5 w-5 text-accent-soft" />
+                <div className="text-2xl font-semibold text-foreground">{gameState?.badges.length ?? 0}</div>
+                <div className="text-xs text-foreground-muted">Badges</div>
+              </div>
+              <div className="glass-panel p-4">
+                <Compass className="mb-3 h-5 w-5 text-accent-soft" />
+                <div className="text-2xl font-semibold text-foreground">{gameState?.unlocked_tools.length ?? 0}</div>
+                <div className="text-xs text-foreground-muted">Lab tools</div>
+              </div>
+              <div className="glass-panel p-4">
+                <Rocket className="mb-3 h-5 w-5 text-accent-soft" />
+                <div className="text-2xl font-semibold text-foreground">{memory?.feedback_count ?? 0}</div>
+                <div className="text-xs text-foreground-muted">Reviews</div>
+              </div>
+            </div>
           </div>
         </section>
       </main>
-
-      <footer className="border-t border-white/5 px-4 py-6 text-center text-xs text-foreground-subtle sm:px-6">
-        EchoMind remembers how you learn, not just what you ask.
-      </footer>
     </div>
   );
 }
+
+export default DashboardPage;

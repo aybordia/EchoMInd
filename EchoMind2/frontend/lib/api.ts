@@ -4,20 +4,23 @@
  */
 import type {
   AgentResult,
+  ConversationTurnRequest,
   AskRequest,
   FeedbackRequest,
   FeedbackResponse,
   FollowupRequest,
+  GameState,
   MemorySummary,
   OnboardingRequest,
   OnboardingResponse,
+  PredictionSubmitRequest,
+  PredictionSubmitResponse,
   SessionResponse,
-  VideoTwinUploadResponse,
   Voice,
 } from "./types";
 
 export const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BACKEND_URL}${path}`, {
@@ -59,6 +62,26 @@ export function getMemory(userId: string): Promise<MemorySummary> {
   return request<MemorySummary>(`/api/memory/${encodeURIComponent(userId)}`);
 }
 
+export function getGameState(userId: string): Promise<GameState> {
+  return request<GameState>(`/api/game/state/${encodeURIComponent(userId)}`);
+}
+
+export function submitPrediction(
+  payload: PredictionSubmitRequest
+): Promise<PredictionSubmitResponse> {
+  return request<PredictionSubmitResponse>("/api/game/prediction", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function storeConversationTurn(payload: ConversationTurnRequest): Promise<{ status: string }> {
+  return request<{ status: string }>("/api/agent/conversation", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function listVoices(): Promise<Voice[]> {
   return request<Voice[]>("/api/voices");
 }
@@ -88,28 +111,6 @@ export function submitFeedback(
     method: "POST",
     body: JSON.stringify(payload),
   });
-}
-
-export async function uploadVideoTwin(
-  file: File,
-  metadata: { session_id: string; user_id: string; description?: string }
-): Promise<VideoTwinUploadResponse> {
-  const form = new FormData();
-  form.append("file", file);
-  form.append("session_id", metadata.session_id);
-  form.append("user_id", metadata.user_id);
-  form.append("description", metadata.description ?? "");
-
-  const res = await fetch(`${BACKEND_URL}/api/video-twin/upload`, {
-    method: "POST",
-    body: form,
-  });
-
-  if (!res.ok) {
-    throw new Error(`Video twin upload failed (${res.status})`);
-  }
-
-  return res.json() as Promise<VideoTwinUploadResponse>;
 }
 
 export function resolveAssetUrl(path?: string | null): string | null {

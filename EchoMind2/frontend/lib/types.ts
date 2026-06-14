@@ -38,6 +38,7 @@ export interface FeedbackRequest {
 export interface FeedbackResponse {
   status: string;
   next_adaptation: string;
+  game_state?: GameState;
 }
 
 export interface AskRequest {
@@ -300,14 +301,73 @@ export interface AgentResult {
   simulation: SimulationPayload;
   teaching: TeachingResult;
   fallback_used: boolean;
+  prediction_prompt?: string;
+  prediction_options?: string[];
+  correct_prediction?: string;
+  prediction_explanation?: string;
+  game_state?: GameState;
 }
 
-export interface VideoTwinUploadResponse {
+export interface ConceptMastery {
+  status: "unseen" | "introduced" | "explored" | "applied" | "mastered";
+  progress: number;
+  evidence: string[];
+}
+
+export interface Badge {
+  id: string;
+  name: string;
+  description: string;
+  earned_at: string;
+  job_id?: string | null;
+}
+
+export interface LabTool {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface XPEvent {
+  type: string;
+  amount: number;
+  job_id?: string | null;
+  metadata?: Record<string, unknown>;
+  timestamp?: string;
+}
+
+export interface GameState {
+  user_id: string;
+  xp_total: number;
+  level: number;
+  concept_mastery: Record<string, ConceptMastery>;
+  badges: Badge[];
+  unlocked_tools: LabTool[];
+  prediction_stats: Record<string, unknown>;
+  xp_events: XPEvent[];
+}
+
+export interface PredictionSubmitRequest {
   job_id: string;
-  status: string;
-  original_video_url: string;
-  digital_twin_payload: RampBoxPayload;
-  teaching: TeachingResult;
+  session_id: string;
+  user_id: string;
+  selected_answer: string;
+}
+
+export interface PredictionSubmitResponse {
+  correct: boolean;
+  correct_answer: string;
+  explanation: string;
+  game_state: GameState;
+}
+
+export interface ConversationTurnRequest {
+  job_id: string;
+  session_id: string;
+  user_id: string;
+  role: "assistant" | "user";
+  text: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface MemorySummary {
@@ -323,6 +383,22 @@ export interface MemorySummary {
   onboarding_complete: boolean;
   feedback_count: number;
   last_feedback_rating: number | null;
+  recent_scenarios?: {
+    scenario_id?: string;
+    title?: string;
+    domain?: string;
+    concepts?: string[];
+    key_takeaway?: string;
+    date?: string;
+  }[];
+  conversation_history?: {
+    job_id?: string;
+    session_id?: string;
+    role: "assistant" | "user";
+    text: string;
+    metadata?: Record<string, unknown>;
+    date?: string;
+  }[];
   personalization_summary: string;
   backboard_enabled: boolean;
 }

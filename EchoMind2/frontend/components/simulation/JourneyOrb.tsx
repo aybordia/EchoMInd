@@ -1,6 +1,5 @@
 "use client";
 
-import { useRef } from "react";
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 
 export interface JourneyWaypoint {
@@ -69,14 +68,16 @@ export function JourneyOrb({
           <div
             className={`absolute -inset-3 rounded-full blur-xl transition-all duration-700 ${
               isSpeaking
-                ? "bg-gradient-to-br from-orange-500/25 to-amber-500/25"
+                ? "animate-pulse bg-gradient-to-br from-orange-500/35 to-amber-500/35"
                 : "bg-gradient-to-br from-blue-500/15 to-purple-500/15"
             }`}
           />
           <button
             type="button"
             onClick={isPlaying ? onPause : onPlay}
-            className="relative flex h-12 w-12 items-center justify-center rounded-full transition-all duration-300 hover:scale-105 active:scale-95"
+            className={`relative flex h-12 w-12 items-center justify-center rounded-full transition-all duration-300 hover:scale-105 active:scale-95 ${
+              isSpeaking ? "animate-[orb-speak_0.9s_ease-in-out_infinite]" : ""
+            }`}
             style={{
               background: isSpeaking
                 ? "radial-gradient(circle at 35% 35%, #ff9d4d, #e86c1a 55%, #b04a0a)"

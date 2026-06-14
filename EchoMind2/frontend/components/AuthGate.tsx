@@ -2,7 +2,7 @@
 
 import { startTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useAuthSession } from "@/lib/auth-client";
 
 export function AuthGate({
   children,
@@ -12,7 +12,7 @@ export function AuthGate({
   fallbackHref?: string;
 }) {
   const router = useRouter();
-  const { status } = useSession();
+  const { status } = useAuthSession();
 
   useEffect(() => {
     if (status === "unauthenticated") {

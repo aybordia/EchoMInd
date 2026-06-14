@@ -47,6 +47,7 @@ interface SceneStageProps {
   groundShadow?: boolean;
   keyColor?: string;
   cameraFocus?: CameraFocus | null;
+  onCameraInteraction?: () => void;
 }
 
 function CameraDirector({
@@ -91,6 +92,7 @@ export function SceneStage({
   groundShadow = true,
   keyColor = "#fff3e0",
   cameraFocus,
+  onCameraInteraction,
 }: SceneStageProps) {
   const directed = cameraFocus !== undefined;
   return (
@@ -148,11 +150,13 @@ export function SceneStage({
             makeDefault
             enablePan={false}
             enableZoom={enableZoom}
-            autoRotate
+            enableDamping
+            autoRotate={autoRotateSpeed > 0}
             autoRotateSpeed={autoRotateSpeed}
             minDistance={minDistance}
             maxDistance={maxDistance}
             maxPolarAngle={Math.PI / 1.7}
+            onStart={onCameraInteraction}
           />
         )}
 

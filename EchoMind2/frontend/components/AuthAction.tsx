@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { Loader2, LogIn, LogOut, Sparkles } from "lucide-react";
-import { signOut, useSession } from "next-auth/react";
+import { signOut } from "next-auth/react";
+import { useAuthSession } from "@/lib/auth-client";
 
 export function AuthAction({
   callbackUrl = "/ask",
@@ -11,7 +12,7 @@ export function AuthAction({
   callbackUrl?: string;
   variant?: "primary" | "secondary";
 }) {
-  const { data, status } = useSession();
+  const { data, status } = useAuthSession();
   const router = useRouter();
 
   if (status === "loading") {

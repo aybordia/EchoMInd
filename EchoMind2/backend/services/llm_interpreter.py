@@ -36,7 +36,7 @@ STEP 2 — if NOT a known scenario, pick the best simulation TYPE from this list
 "pendulum" — swinging, pendulum, wrecking ball, playground swing, metronome, Foucault
   Required params: lengths (array of pendulum lengths in meters, 2-4 items), gravity (m/s²), labels (array of labels), colors (array of hex colors)
 
-"energy_comparison" — energy types, efficiency, power output, calories, electricity, fuel, roller coaster energy
+"energy_comparison" — energy types, efficiency, power output, calories, electricity, fuel
   Required params: bars: [{label, value, unit, color}] (3-6 items with real calculated physics values)
 
 "collision" — Newton's cradle, billiards, car crash, bumper cars, momentum, elastic/inelastic
@@ -72,6 +72,7 @@ Return this JSON structure:
 RULES:
 - Return ONLY valid JSON
 - Use REAL physics values — calculate them. A baseball pitch is 40 m/s not 100. Earth gravity is 9.81.
+- Roller coaster, coaster, loop-the-loop, hill/drop ride, or theme park ride prompts MUST use sim_type "projectile" because EchoMind has a dedicated roller-coaster track renderer for that.
 - For comparisons, pick scenarios that show dramatic visual differences
 - The transcript must reference the simulation ("Notice how..." / "Watch the..." / "See how...")
 - Pick vivid, distinct hex colors for each item
@@ -81,6 +82,23 @@ RULES:
 
 def _contains_any(text: str, keywords: list[str]) -> bool:
     return any(keyword in text for keyword in keywords)
+
+
+def _is_roller_coaster_question(text: str) -> bool:
+    return _contains_any(
+        text.lower(),
+        [
+            "roller coaster",
+            "rollercoaster",
+            "coaster",
+            "loop-the-loop",
+            "loop de loop",
+            "theme park",
+            "first hill",
+            "mega drop",
+            "cart on a track",
+        ],
+    )
 
 
 def _heuristic_dynamic_plan(question: str, student_context: dict[str, Any]) -> dict[str, Any] | None:
@@ -116,15 +134,49 @@ def _heuristic_dynamic_plan(question: str, student_context: dict[str, Any]) -> d
             "concepts": concepts,
         }
 
-    if _contains_any(q, ["roller coaster", "rollercoaster", "loop", "theme park"]):
+    if _is_roller_coaster_question(q):
+        coaster_has_friction = _contains_any(
+            q,
+            ["friction", "rough", "brake", "brakes", "air resistance", "drag", "energy loss", "slows down"],
+        )
+        if coaster_has_friction:
+            return result(
+                "projectile",
+                "Roller Coaster Energy With Friction",
+                {
+                    "coaster_mode": True,
+                    "track_length_m": 120,
+                    "loop_radius_m": 12,
+                    "scenarios": [
+                        {"label": "Low friction", "hill_height_m": 24, "friction_loss_fraction": 0.05, "gravity": 9.81, "color": "#50e080"},
+                        {"label": "Medium friction", "hill_height_m": 24, "friction_loss_fraction": 0.18, "gravity": 9.81, "color": "#ff8c42"},
+                        {"label": "Heavy friction", "hill_height_m": 24, "friction_loss_fraction": 0.35, "gravity": 9.81, "color": "#ff4d6d"},
+                    ]
+                },
+                "Friction destroys energy completely.",
+                "Friction transforms some mechanical energy into heat and sound, so the coaster keeps less speed for the same starting height.",
+                "Watch the same roller coaster with different friction levels. With low friction, most of the height energy turns into speed, so the car carries more motion through the loop. With heavier friction, more energy leaves the mechanical system as heat and sound, so the car slows down sooner. As you can see in the simulation, the track is the same, but the available energy changes how much speed the car can keep.",
+                "Mechanical Energy With Friction",
+                "E_final = mgh - W_friction",
+                "mgh is the starting gravitational potential energy, and W_friction is the energy transformed away from motion by friction.",
+                ["energy conservation", "friction", "kinetic energy", "gravitational potential energy"],
+                [
+                    "What if the first hill were taller to overcome friction?",
+                    "How much speed is needed at the top of the loop?",
+                    "What if the track had brakes after the first drop?",
+                ],
+            )
         return result(
             "projectile",
             "Roller Coaster Energy Through the Ride",
             {
+                "coaster_mode": True,
+                "track_length_m": 120,
+                "loop_radius_m": 12,
                 "scenarios": [
-                    {"label": "24m first hill", "v0": 26, "angle_deg": 48, "gravity": 9.81, "color": "#4d8fe0"},
-                    {"label": "18m hill", "v0": 21, "angle_deg": 44, "gravity": 9.81, "color": "#ff8c42"},
-                    {"label": "30m mega drop", "v0": 30, "angle_deg": 52, "gravity": 9.81, "color": "#7c5cff"},
+                    {"label": "18 m hill", "hill_height_m": 18, "gravity": 9.81, "color": "#ff8c42"},
+                    {"label": "24 m hill", "hill_height_m": 24, "gravity": 9.81, "color": "#4d8fe0"},
+                    {"label": "30 m hill", "hill_height_m": 30, "gravity": 9.81, "color": "#7c5cff"},
                 ]
             },
             "Roller coasters need engines the whole time to stay moving.",
@@ -355,6 +407,9 @@ async def interpret_with_llm(question: str, student_context: dict[str, Any]) -> 
         body = resp.json()
         content = body["choices"][0]["message"]["content"]
         result = json.loads(content)
+        if heuristic and _is_roller_coaster_question(question):
+            logger.info("Forcing roller-coaster prompt to dedicated coaster renderer")
+            return heuristic
         logger.info(f"LLM classified as: {result.get('sim_type', result.get('domain', 'unknown'))}")
         return result
 
@@ -367,6 +422,39 @@ async def interpret_with_llm(question: str, student_context: dict[str, Any]) -> 
 
 def _compute_projectile(params: dict) -> dict[str, Any]:
     scenarios = params.get("scenarios", [])
+    if params.get("coaster_mode"):
+        track_length = float(params.get("track_length_m", 120))
+        loop_radius = float(params.get("loop_radius_m", 12))
+        computed = []
+        for s in scenarios:
+            g = float(s.get("gravity", 9.81))
+            hill_height = max(1.0, float(s.get("hill_height_m", 24)))
+            loss_fraction = max(
+                0.0,
+                min(
+                    0.85,
+                    float(s.get("friction_loss_fraction", params.get("friction_loss_fraction", 0))),
+                ),
+            )
+            ideal_speed = math.sqrt(max(0.0, (1 - loss_fraction) * 2 * g * hill_height))
+            loop_top_min_speed = math.sqrt(g * loop_radius)
+            estimated_ride_time = track_length / max(ideal_speed * 0.68, 1.0)
+            computed.append({
+                "label": s.get("label", f"{round(hill_height)} m hill"),
+                "color": s.get("color", "#4d8fe0"),
+                "v0": round(ideal_speed, 2),
+                "angle_deg": 0,
+                "gravity": g,
+                "max_height_m": round(hill_height, 2),
+                "range_m": round(track_length, 2),
+                "flight_time_s": round(estimated_ride_time, 3),
+                "loop_top_min_speed_m_s": round(loop_top_min_speed, 2),
+                "energy_loss_percent": round(loss_fraction * 100, 1),
+                "can_complete_loop": ideal_speed >= loop_top_min_speed,
+                "keyframes": [],
+            })
+        return {"trajectories": computed, "coaster_mode": True, "track_length_m": track_length, "loop_radius_m": loop_radius}
+
     if not scenarios:
         scenarios = [
             {"label": "45°", "v0": params.get("v0", 20), "angle_deg": 45, "gravity": params.get("gravity", 9.81), "color": "#4d8fe0"},
@@ -494,11 +582,11 @@ def _build_journey_waypoints(sim_type: str, computed: dict, teaching: dict) -> l
 
     if sim_type == "projectile":
         return [
-            {"id": "overview", "time": 0, "label": "Overview", "narration": sentences[0] if len(sentences) > 0 else "Let's explore this roller coaster!", "cameraPos": [0, 8, 20], "cameraTarget": [0, 3, 0]},
-            {"id": "climb", "time": 3, "label": "The Climb", "narration": sentences[1] if len(sentences) > 1 else "Watch as potential energy builds during the climb.", "cameraPos": [-8, 6, 8], "cameraTarget": [-6, 4, 0]},
-            {"id": "drop", "time": 6, "label": "The Drop", "narration": sentences[2] if len(sentences) > 2 else "Potential energy converts to kinetic energy in the drop!", "cameraPos": [-2, 3, 6], "cameraTarget": [-2, 1, 0]},
-            {"id": "loop", "time": 9, "label": "The Loop", "narration": sentences[3] if len(sentences) > 3 else "Centripetal force keeps the car on the track through the loop.", "cameraPos": [2, 5, 8], "cameraTarget": [2, 3.5, 0]},
-            {"id": "finish", "time": 12, "label": "Summary", "narration": teaching.get("core_takeaway", "Energy transforms between kinetic and potential throughout the ride."), "cameraPos": [0, 6, 18], "cameraTarget": [0, 3, 0]},
+            {"id": "overview", "time": 0, "label": "Overview", "narration": sentences[0] if len(sentences) > 0 else "Let's explore this roller coaster!", "cameraPos": [0, 8, 24], "cameraTarget": [0, 3, 0]},
+            {"id": "climb", "time": 3, "label": "The Climb", "narration": sentences[1] if len(sentences) > 1 else "Watch as potential energy builds during the climb.", "cameraPos": [-8, 6.5, 13], "cameraTarget": [-8, 4, 0]},
+            {"id": "drop", "time": 6, "label": "The Drop", "narration": sentences[2] if len(sentences) > 2 else "Potential energy converts to kinetic energy in the drop!", "cameraPos": [-4, 4, 12], "cameraTarget": [-4, 1.4, 0]},
+            {"id": "loop", "time": 9, "label": "The Loop", "narration": sentences[3] if len(sentences) > 3 else "Centripetal force keeps the car on the track through the loop.", "cameraPos": [0.5, 5.5, 12], "cameraTarget": [0, 3.4, 0]},
+            {"id": "finish", "time": 12, "label": "Summary", "narration": teaching.get("core_takeaway", "Energy transforms between kinetic and potential throughout the ride."), "cameraPos": [0, 7, 22], "cameraTarget": [0, 3, 0]},
         ]
     elif sim_type == "pendulum":
         return [

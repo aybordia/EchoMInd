@@ -1,20 +1,30 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { AlertTriangle, Loader2, MessageCircle, RotateCcw, Sparkles } from "lucide-react";
 import { AgentTimeline } from "@/components/AgentTimeline";
 import { AuthGate } from "@/components/AuthGate";
 import { AskBar } from "@/components/AskBar";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { NavBar } from "@/components/NavBar";
+import { PredictionCard } from "@/components/PredictionCard";
 import { SimulationViewer } from "@/components/SimulationViewer";
+import { XPHeader } from "@/components/XPHeader";
+import { XPToast } from "@/components/XPToast";
 import { JourneyOrb } from "@/components/simulation/JourneyOrb";
 import type { JourneyWaypoint } from "@/components/simulation/JourneyOrb";
-import { askAgent, followupAgent, resolveAssetUrl } from "@/lib/api";
+import {
+  askAgent,
+  followupAgent,
+  getGameState,
+  resolveAssetUrl,
+  storeConversationTurn,
+  submitPrediction,
+} from "@/lib/api";
 import { AGENT_STAGES, SAMPLE_PROMPTS } from "@/lib/constants";
 import { hasCompletedOnboarding, useEchoSession } from "@/lib/session";
-import type { AgentResult } from "@/lib/types";
+import type { AgentResult, GameState, PredictionSubmitResponse } from "@/lib/types";
 
 type ViewState = "idle" | "running" | "result";
 
@@ -137,7 +147,6 @@ function AskPageShell() {
 }
 
 function AskPageContent() {
-  const router = useRouter();
   const { sessionId, userId, authUserId } = useEchoSession();
   const searchParams = useSearchParams();
   const initialQuestion = searchParams.get("q") ?? "";
@@ -158,6 +167,12 @@ function AskPageContent() {
   const [simulationPaused, setSimulationPaused] = useState(false);
   const [simulationTime, setSimulationTime] = useState(0);
   const [introComplete, setIntroComplete] = useState(false);
+  const [conversationStarted, setConversationStarted] = useState(false);
+  const [predictionResult, setPredictionResult] = useState<PredictionSubmitResponse | null>(null);
+  const [predictionLoading, setPredictionLoading] = useState(false);
+  const [predictionRevealed, setPredictionRevealed] = useState(false);
+  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [xpToast, setXpToast] = useState<string | null>(null);
 
   const autoSubmitted = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -181,6 +196,9 @@ function AskPageContent() {
   const stages = result?.stages ?? AGENT_STAGES;
   const simulationTitle = getSimulationTitle(result);
   const canNavigateWaypoints = waypoints.length > 0;
+  const hasPrediction = Boolean(result?.prediction_prompt && result.prediction_options?.length);
+  const awaitingPrediction = Boolean(result && hasPrediction && !predictionRevealed);
+  const canAskFollowup = Boolean(result && introComplete && !awaitingPrediction);
   const conversationTurns = conversation.filter((entry) => entry.role === "user").length;
   const feedbackMetrics = useMemo(() => {
     if (!result) return undefined;
@@ -207,8 +225,20 @@ function AskPageContent() {
     waypoints,
   ]);
 
+  useEffect(() => {
+    if (!userId) return;
+    getGameState(userId)
+      .then(setGameState)
+      .catch(() => undefined);
+  }, [userId]);
+
   const addConversationEntry = useCallback((entry: ConversationEntry) => {
     setConversation((prev) => [...prev, entry]);
+  }, []);
+
+  const showXPToast = useCallback((message: string) => {
+    setXpToast(message);
+    window.setTimeout(() => setXpToast(null), 2600);
   }, []);
 
   const replacePendingEntry = useCallback((id: string, text: string) => {
@@ -317,9 +347,12 @@ function AskPageContent() {
 
   useEffect(() => {
     if (!isPlaying || !currentWaypoint) return;
-    playWaypointAudio(currentWaypoint);
+    const timer = window.setTimeout(() => {
+      playWaypointAudio(currentWaypoint);
+    }, 0);
 
     return () => {
+      window.clearTimeout(timer);
       syncAudioCleanup();
     };
   }, [currentWaypoint, isPlaying, playWaypointAudio, syncAudioCleanup]);
@@ -341,7 +374,8 @@ function AskPageContent() {
   }, [isPlaying, result, simulationPaused, startTimeline, stopTimeline, view]);
 
   useEffect(() => {
-    if (result) {
+    if (!result || conversationStarted) return;
+    const timer = window.setTimeout(() => {
       const introText = result.teaching.adaptation_note
         ? `${result.teaching.key_takeaway} ${result.teaching.adaptation_note}`
         : result.teaching.key_takeaway;
@@ -352,46 +386,54 @@ function AskPageContent() {
           text: introText,
         },
       ]);
-    }
-  }, [result]);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [conversationStarted, result]);
 
   useEffect(() => {
     if (!result || canNavigateWaypoints) return;
+    let audio: HTMLAudioElement | null = null;
+    const timer = window.setTimeout(() => {
+      syncAudioCleanup();
+      setIntroComplete(false);
+      setIsSpeaking(true);
 
-    syncAudioCleanup();
-    setIntroComplete(false);
-    setIsSpeaking(true);
+      const summaryText = result.teaching.transcript || result.teaching.key_takeaway;
+      const audioUrl = result.teaching.audio_url ? resolveAssetUrl(result.teaching.audio_url) : null;
 
-    const summaryText = result.teaching.transcript || result.teaching.key_takeaway;
-    const audioUrl = result.teaching.audio_url ? resolveAssetUrl(result.teaching.audio_url) : null;
+      const finish = () => {
+        setIsSpeaking(false);
+        setIntroComplete(true);
+      };
 
-    const finish = () => {
-      setIsSpeaking(false);
-      setIntroComplete(true);
-    };
-
-    if (!audioUrl) {
-      if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-        finish();
+      if (!audioUrl) {
+        if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+          finish();
+          return;
+        }
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(summaryText);
+        utterance.onend = finish;
+        window.speechSynthesis.speak(utterance);
         return;
       }
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(summaryText);
-      utterance.onend = finish;
-      window.speechSynthesis.speak(utterance);
-      return () => {
-        window.speechSynthesis.cancel();
-      };
-    }
 
-    const audio = new Audio(audioUrl);
-    audioRef.current = audio;
-    audio.onended = finish;
-    audio.onerror = finish;
-    audio.play().catch(finish);
+      audio = new Audio(audioUrl);
+      audioRef.current = audio;
+      audio.onended = finish;
+      audio.onerror = finish;
+      audio.play().catch(finish);
+    }, 0);
 
     return () => {
-      audio.pause();
+      window.clearTimeout(timer);
+      if (audio) audio.pause();
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
     };
   }, [canNavigateWaypoints, result, syncAudioCleanup]);
 
@@ -409,6 +451,10 @@ function AskPageContent() {
       setSimulationPaused(false);
       setSimulationTime(0);
       setIntroComplete(false);
+      setConversationStarted(false);
+      setPredictionResult(null);
+      setPredictionLoading(false);
+      setPredictionRevealed(false);
       setShowFeedback(false);
       setTutorBusy(false);
       syncAudioCleanup();
@@ -416,6 +462,9 @@ function AskPageContent() {
       try {
         const res = await fetcher();
         setResult(res);
+        if (res.game_state) {
+          setGameState(res.game_state);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
       } finally {
@@ -442,6 +491,12 @@ function AskPageContent() {
 
   function handleTimelineComplete() {
     setView(error ? "idle" : "result");
+    if (!error && result?.prediction_prompt && result.prediction_options?.length && !predictionRevealed) {
+      setSimulationPaused(true);
+      setIntroComplete(false);
+      setIsPlaying(false);
+      return;
+    }
     if (!error && waypoints.length > 0) {
       setCurrentWaypointIndex(0);
       setSimulationTime(waypoints[0]?.time ?? 0);
@@ -465,8 +520,25 @@ function AskPageContent() {
     setSimulationPaused(false);
     setSimulationTime(0);
     setIntroComplete(false);
+    setConversationStarted(false);
+    setPredictionResult(null);
+    setPredictionLoading(false);
+    setPredictionRevealed(false);
     setTutorBusy(false);
     setShowFeedback(false);
+  }
+
+  function startNarratedReveal() {
+    setPredictionRevealed(true);
+    if (waypoints.length > 0) {
+      setCurrentWaypointIndex(0);
+      setSimulationTime(waypoints[0]?.time ?? 0);
+      setSimulationPaused(false);
+      setIsPlaying(true);
+      setIntroComplete(false);
+    } else {
+      setIntroComplete(false);
+    }
   }
 
   function handlePause() {
@@ -493,10 +565,49 @@ function AskPageContent() {
     stopTimeline();
   }
 
+  async function handlePrediction(answer: string) {
+    if (!result || !sessionId || !userId || predictionLoading) return;
+    setPredictionLoading(true);
+    try {
+      const next = await submitPrediction({
+        job_id: result.job_id,
+        session_id: sessionId,
+        user_id: userId,
+        selected_answer: answer,
+      });
+      setPredictionResult(next);
+      setGameState(next.game_state);
+      showXPToast(next.correct ? "+50 XP for a correct prediction" : "+20 XP for predicting");
+    } finally {
+      setPredictionLoading(false);
+    }
+  }
+
+  function handleStartConversation() {
+    if (conversationStarted) return;
+    setConversationStarted(true);
+    addConversationEntry({
+      id: uid("assistant"),
+      role: "assistant",
+      text: "Conversation mode is live. Ask a what-if, ask me to zoom into a moment, or tell me to change a variable and I will update the simulation.",
+    });
+  }
+
   async function handleTutorQuestion(input: string) {
     if (!sessionId || !userId || !result) return;
+    if (!conversationStarted) {
+      setConversationStarted(true);
+    }
 
     addConversationEntry({ id: uid("user"), role: "user", text: input });
+    void storeConversationTurn({
+      job_id: result.job_id,
+      session_id: sessionId,
+      user_id: userId,
+      role: "user",
+      text: input,
+      metadata: { simulation_title: simulationTitle, current_waypoint: currentWaypoint?.label ?? null },
+    }).catch(() => undefined);
 
     const localCommand = parseLocalCommand(input, waypoints);
     if (localCommand) {
@@ -515,6 +626,14 @@ function AskPageContent() {
       }
 
       addConversationEntry({ id: uid("assistant"), role: "assistant", text: localCommand.response });
+      void storeConversationTurn({
+        job_id: result.job_id,
+        session_id: sessionId,
+        user_id: userId,
+        role: "assistant",
+        text: localCommand.response,
+        metadata: { local_command: localCommand.kind },
+      }).catch(() => undefined);
       return;
     }
 
@@ -537,6 +656,10 @@ function AskPageContent() {
 
       syncAudioCleanup();
       setResult(next);
+      if (next.game_state) {
+        setGameState(next.game_state);
+        showXPToast("+35 XP for a follow-up simulation");
+      }
       setQuestion(input);
       setCurrentWaypointIndex(0);
       setIsSpeaking(false);
@@ -548,7 +671,20 @@ function AskPageContent() {
         (((next.simulation as unknown as Record<string, unknown>).journey_waypoints as JourneyWaypoint[] | undefined)?.length ?? 0) > 0
       );
       setIntroComplete(false);
-      replacePendingEntry(pendingId, next.teaching.key_takeaway);
+      const responseText = `As you can see in the simulation, ${next.teaching.key_takeaway}`;
+      replacePendingEntry(pendingId, responseText);
+      void storeConversationTurn({
+        job_id: next.job_id,
+        session_id: sessionId,
+        user_id: userId,
+        role: "assistant",
+        text: responseText,
+        metadata: {
+          updated_simulation: true,
+          parent_job_id: result.job_id,
+          simulation_title: getSimulationTitle(next),
+        },
+      }).catch(() => undefined);
     } catch (err) {
       replacePendingEntry(
         pendingId,
@@ -602,7 +738,7 @@ function AskPageContent() {
           <AskBar onSubmit={handleAsk} loading={true} initialValue={initialQuestion} />
           <div className="flex flex-1 items-center justify-center py-12">
             <div className="w-full max-w-md space-y-4">
-              <p className="text-center text-sm italic text-foreground-muted">"{question}"</p>
+              <p className="text-center text-sm italic text-foreground-muted">&ldquo;{question}&rdquo;</p>
               <AgentTimeline
                 key={timelineKey}
                 stages={stages}
@@ -628,6 +764,11 @@ function AskPageContent() {
               <div className="absolute left-6 top-6 z-10 rounded-xl border border-white/8 bg-black/40 px-3 py-1.5 backdrop-blur-2xl">
                 <h3 className="text-sm font-semibold text-foreground/80">{simulationTitle}</h3>
               </div>
+              {awaitingPrediction ? (
+                <div className="absolute right-6 top-6 z-10 rounded-xl border border-accent/20 bg-black/50 px-3 py-1.5 text-xs font-semibold text-accent-soft backdrop-blur-2xl">
+                  Prediction locked before reveal
+                </div>
+              ) : null}
 
               <div className="h-full overflow-hidden rounded-[1.25rem] border border-white/8">
                 <SimulationViewer
@@ -660,6 +801,18 @@ function AskPageContent() {
                   End session
                 </button>
               </div>
+              {userId ? <XPHeader userId={userId} initialState={gameState} /> : null}
+
+              {awaitingPrediction && result.prediction_prompt && result.prediction_options ? (
+                <PredictionCard
+                  prompt={result.prediction_prompt}
+                  options={result.prediction_options}
+                  result={predictionResult}
+                  loading={predictionLoading}
+                  onSubmit={handlePrediction}
+                  onContinue={startNarratedReveal}
+                />
+              ) : null}
 
               <div className="flex flex-col items-center gap-4 rounded-[1.5rem] border border-white/8 bg-black/25 px-4 py-5">
                 {canNavigateWaypoints ? (
@@ -676,8 +829,16 @@ function AskPageContent() {
                   />
                 ) : (
                   <div className="relative">
-                    <div className="absolute -inset-5 rounded-full bg-gradient-to-br from-orange-500/20 via-sky-400/20 to-violet-500/20 blur-2xl" />
-                    <div className="relative h-20 w-20 rounded-full bg-[radial-gradient(circle_at_35%_35%,#ffb46d,#ff7a3d_55%,#4f46e5)] shadow-[0_0_40px_rgba(255,122,61,0.35)]" />
+                    <div
+                      className={`absolute -inset-5 rounded-full bg-gradient-to-br from-orange-500/20 via-sky-400/20 to-violet-500/20 blur-2xl ${
+                        isSpeaking ? "animate-pulse" : ""
+                      }`}
+                    />
+                    <div
+                      className={`relative h-20 w-20 rounded-full bg-[radial-gradient(circle_at_35%_35%,#ffb46d,#ff7a3d_55%,#4f46e5)] shadow-[0_0_40px_rgba(255,122,61,0.35)] ${
+                        isSpeaking ? "animate-[orb-speak_0.9s_ease-in-out_infinite]" : ""
+                      }`}
+                    />
                   </div>
                 )}
 
@@ -692,6 +853,22 @@ function AskPageContent() {
                   <div className="flex items-center gap-2 rounded-full border border-amber-400/15 bg-amber-400/5 px-3 py-1.5 text-xs text-amber-100">
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-300" />
                     EchoMind is walking through the simulation first.
+                  </div>
+                ) : null}
+
+                {introComplete && !conversationStarted && !awaitingPrediction ? (
+                  <div className="w-full rounded-2xl border border-accent/20 bg-accent/8 p-4 text-center">
+                    <p className="text-sm text-foreground-muted">
+                      The first walkthrough is complete. Type a follow-up below, or start the live conversation for guided what-if questions.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleStartConversation}
+                      className="mt-3 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      Start Conversation
+                    </button>
                   </div>
                 ) : null}
 
@@ -733,11 +910,15 @@ function AskPageContent() {
                 <AskBar
                   onSubmit={handleTutorQuestion}
                   loading={tutorBusy}
-                  disabled={!introComplete}
-                  placeholder='Try: "Go back to the loop" or "What if this was two times bigger?"'
+                  disabled={!canAskFollowup}
+                  placeholder={
+                    canAskFollowup
+                      ? 'Try: "Go back to the loop" or "What if this was two times bigger?"'
+                      : "Follow-ups unlock after the first reveal"
+                  }
                 />
 
-                {result.teaching.followups.length > 0 ? (
+                {canAskFollowup && result.teaching.followups.length > 0 ? (
                   <div className="space-y-2">
                     <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-foreground-subtle">
                       Suggested follow-ups
@@ -795,6 +976,7 @@ function AskPageContent() {
           onClose={() => setShowFeedback(false)}
         />
       ) : null}
+      <XPToast message={xpToast} />
     </div>
   );
 }

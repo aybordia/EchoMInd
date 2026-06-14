@@ -3,19 +3,22 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Settings, Sparkles } from "lucide-react";
-import { useSession } from "next-auth/react";
+import { useAuthSession } from "@/lib/auth-client";
+import { useEchoSession } from "@/lib/session";
 import { AuthAction } from "./AuthAction";
+import { XPHeader } from "./XPHeader";
 
 const LINKS = [
   { href: "/ask", label: "Ask" },
-  { href: "/video-twin", label: "Video Twin" },
+  { href: "/progress", label: "Progress" },
   { href: "/onboarding", label: "Onboarding" },
   { href: "/settings", label: "Settings" },
 ];
 
 export function NavBar() {
   const pathname = usePathname();
-  const { data } = useSession();
+  const { data } = useAuthSession();
+  const { userId } = useEchoSession();
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/5 bg-background/70 backdrop-blur-xl">
@@ -43,6 +46,11 @@ export function NavBar() {
               </Link>
             );
           })}
+          {data?.user?.email ? (
+            <div className="hidden md:block">
+              <XPHeader userId={userId} />
+            </div>
+          ) : null}
           {data?.user?.email ? (
             <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-foreground-muted sm:flex">
               <Settings className="h-3.5 w-3.5 text-accent-soft" />

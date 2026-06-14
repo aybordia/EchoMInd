@@ -219,6 +219,35 @@ async def store_simulation_memory(user_id: str, scenario: dict[str, Any], teachi
     )
 
 
+async def store_conversation_turn(
+    user_id: str,
+    job_id: str,
+    session_id: str,
+    role: str,
+    text: str,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    memory = _load(user_id)
+    turn = {
+        "job_id": job_id,
+        "session_id": session_id,
+        "role": role,
+        "text": text,
+        "metadata": metadata or {},
+        "date": datetime.now(timezone.utc).isoformat(),
+    }
+    memory["conversation_history"] = (memory.get("conversation_history", []) + [turn])[-80:]
+    _save(user_id, memory)
+
+    _backboard_write(
+        user_id,
+        (
+            f"Conversation turn during job {job_id}. Role: {role}. Text: {text}. "
+            f"Context: {json.dumps(metadata or {}, ensure_ascii=True)[:500]}"
+        ),
+    )
+
+
 # Maps feedback chips to presentation preference adaptations.
 _CHIP_ADAPTATIONS: dict[str, dict[str, str]] = {
     "more_visuals": {"diagram_density": "high"},
@@ -310,6 +339,8 @@ async def get_memory_summary(user_id: str) -> dict[str, Any]:
             if memory.get("feedback_history")
             else None
         ),
+        "recent_scenarios": memory.get("recent_scenarios", []),
+        "conversation_history": memory.get("conversation_history", []),
         "personalization_summary": _personalization_summary(memory),
         "backboard_enabled": _backboard_enabled(),
     }

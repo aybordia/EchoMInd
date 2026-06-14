@@ -13,7 +13,9 @@ type UserFile = {
   users: StoredUser[];
 };
 
-const DATA_DIR = path.join(process.cwd(), ".local-data");
+const DATA_DIR =
+  process.env.USER_STORE_DIR ||
+  (process.env.VERCEL ? path.join("/tmp", "echomind-local-data") : path.join(process.cwd(), ".local-data"));
 const USERS_PATH = path.join(DATA_DIR, "users.json");
 
 function normalizeEmail(email: string): string {
@@ -91,4 +93,3 @@ export async function verifyUser(email: string, password: string): Promise<{ id:
   if (!verifyPassword(password, user.passwordHash)) return null;
   return { id: user.id, email: user.email };
 }
-
